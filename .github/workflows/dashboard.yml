@@ -72,6 +72,7 @@ jobs:
       - name: Site bouwen
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+          ACTIONS_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
         run: python cloud.py build site
 
       - name: Cache versleuteld opslaan

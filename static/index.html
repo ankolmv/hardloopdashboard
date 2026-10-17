@@ -428,8 +428,11 @@ async function staticApi(path, body){
   }
   return dispatchAction(path.split("/").pop(), body || {});
 }
+async function sharedToken(){
+  try { return (await sget("cfg.enc")).actions_token || ""; } catch { return ""; }
+}
 async function dispatchAction(action, args){
-  const token = store.get("gh_token", "");
+  const token = store.get("gh_token", "") || await sharedToken();
   if (!token){ openCloudCfg("Vul eerst je GitHub-token in om acties vanaf deze site te starten."); throw new Error("Geen GitHub-token ingesteld"); }
   const r = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows/${META.workflow}/dispatches`, {method:"POST",
     headers:{Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json"},
@@ -457,10 +460,14 @@ function openCloudCfg(msg=""){
     <p class="cap" style="margin:0">Met een GitHub-token kun je vanaf dit apparaat synchroniseren, je doel wijzigen en trainingen of zones naar je Garmin sturen.
       Maak een <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a> met alleen toegang tot <b>${esc(META.repo)}</b> en de permissie <b>Actions: Read and write</b>.
       De token wordt alleen op dit apparaat bewaard.</p>
+    <p class="cap" style="margin:0" id="sharedTok"></p>
     <input type="password" id="tokIn" placeholder="github_pat_…" value="${store.get("gh_token","")?"••••••••":""}">
     <div class="row"><button class="btn primary" id="tokSave">Opslaan</button><button class="btn" id="tokDel">Token verwijderen</button>
       <button class="btn" id="lockNow">Uitloggen op dit apparaat</button><button class="btn" id="cfgClose" style="margin-left:auto">Sluiten</button></div></div>`;
   document.body.appendChild(bg);
+  sharedToken().then(t => { const el = bg.querySelector("#sharedTok"); if (el) el.innerHTML = t
+    ? "✓ Er is een gedeelde token ingesteld via GitHub: de knoppen werken op elk apparaat zonder dat je hier iets invult."
+    : "Tip: zet de token één keer als geheime sleutel <b>ACTIONS_TOKEN</b> in GitHub (script set_actions_token.ps1), dan werkt het op al je apparaten automatisch."; });
   const close = () => bg.remove();
   bg.querySelector("#cfgClose").onclick = close; bg.onclick = e => { if (e.target === bg) close(); };
   bg.querySelector("#tokSave").onclick = () => { const v = bg.querySelector("#tokIn").value.trim(); if (v && !v.startsWith("•")) { store.set("gh_token", v); toast("Token opgeslagen"); } close(); };
