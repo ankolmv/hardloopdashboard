@@ -506,13 +506,23 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     paces = {"E_fast": tp_now["E"]["from"], "E_slow": tp_now["E"]["to"], "M": tp_now["M"]["from"],
              "T": tp_now["T"]["from"], "I": tp_now["I"]["from"]} if tp_now else None
     daily_by = {x["date"]: x for x in daily}
-    analyses = {}
-    if paces and hr_rows:
+    # Analyse, suggestie en Garmin-workouts gebruiken altijd de model-zones (los van de weergavekeuze)
+    model_rows = hr_rows_by.get("model") or hr_rows
+    if model_floors and not use_model:
+        runs_m = []
         for r in runs:
-            analyses[r["id"]] = analysis.analyze_session(r, runs, daily_by, hr_rows, paces)
+            st = store.streams(r["id"])
+            z = M.hr_zone_seconds(st["heartrate"], st["time"], model_floors) if st.get("heartrate") and st.get("time") else r["zones"]
+            runs_m.append({**r, "zones": z})
+    else:
+        runs_m = runs
+    analyses = {}
+    if paces and model_rows:
+        for r in runs_m:
+            analyses[r["id"]] = analysis.analyze_session(r, runs_m, daily_by, model_rows, paces)
     suggestion = None
-    if paces and hr_rows and runs:
-        suggestion = analysis.suggest(runs, daily_by, hr_rows, paces, today, tuple(settings.get("long_days", [4, 5, 6])))
+    if paces and model_rows and runs:
+        suggestion = analysis.suggest(runs_m, daily_by, model_rows, paces, today, tuple(settings.get("long_days", [4, 5, 6])))
         for st in suggestion["steps"]:
             for s2 in ([st] if st["kind"] != "repeat" else st["steps"]):
                 if s2.get("pace"):
