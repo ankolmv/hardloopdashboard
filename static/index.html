@@ -468,6 +468,10 @@ function openCloudCfg(msg=""){
   bg.querySelector("#lockNow").onclick = () => { try { localStorage.removeItem("hs_key"); } catch {} location.reload(); };
 }
 async function unlock(){
+  if (!window.isSecureContext || !crypto.subtle){
+    document.body.innerHTML = `<div class="lock"><div class="box"><h2 style="margin:0">Niet beveiligd</h2><p class="muted">Open het dashboard via <b>https://</b>; ontsleutelen werkt alleen op een beveiligde verbinding.</p></div></div>`;
+    return new Promise(() => {});
+  }
   await fetchMeta();
   const saved = store.get("hs_key", "");
   if (saved){
@@ -489,7 +493,11 @@ async function unlock(){
         DCACHE["dash-12.enc"] = await decryptFile("dash-12.enc", k); CK = k;
         if (el.querySelector("#rem").checked) store.set("hs_key", toB64(await crypto.subtle.exportKey("raw", k)));
         el.remove(); resolve();
-      } catch { el.querySelector("#pwMsg").textContent = "Onjuist wachtwoord."; }
+      } catch (err) {
+        // OperationError = ontsleutelen mislukt = verkeerd wachtwoord; al het andere is een technisch probleem
+        el.querySelector("#pwMsg").textContent = err && err.name === "OperationError" ? "Onjuist wachtwoord."
+          : `Kan niet openen: ${err && err.message ? err.message : err}`;
+      }
     };
   });
 }
