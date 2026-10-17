@@ -3,7 +3,7 @@
 # Leest je sleutels uit .env en .garmin_tokens\ en stuurt ze versleuteld naar GitHub (Settings > Secrets).
 $ErrorActionPreference = "Stop"
 $gh = "C:\Program Files\GitHub CLI\gh.exe"
-$repo = "pubquizmooiemannen/hardloopdashboard"
+$repo = "ankolmv/hardloopdashboard"
 Set-Location $PSScriptRoot
 
 Write-Host "1/4 intervals.icu-sleutels uit .env ..."
