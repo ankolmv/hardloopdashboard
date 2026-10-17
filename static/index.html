@@ -437,7 +437,8 @@ async function dispatchAction(action, args){
   const r = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows/${META.workflow}/dispatches`, {method:"POST",
     headers:{Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json"},
     body:JSON.stringify({ref:"main", inputs:{action, args:JSON.stringify(args)}})});
-  if (r.status !== 204){ const t = await r.text(); throw new Error(`GitHub weigerde de actie (${r.status}). ${r.status===401||r.status===403?"Controleer je token.":t.slice(0,120)}`); }
+  if (r.status !== 204){ const t = await r.text(); throw new Error(`GitHub weigerde de actie (${r.status}). ${r.status===401?"De token is ongeldig of verlopen: open het tandwiel en vul een nieuwe in."
+    : r.status===403||r.status===404?"De token mist rechten: zet bij de token Actions op 'Read and write' voor deze repository.":t.slice(0,120)}`); }
   toast("Actie gestart op GitHub. Het dashboard ververst vanzelf zodra hij klaar is (1–3 min).", 6000);
   waitForBuild(META.built_at);
   return {queued:true};
@@ -453,6 +454,17 @@ function waitForBuild(prev){
     } catch {}
   }, 15000);
 }
+// Controleert of een token geldig is en bij de Actions van deze repository kan
+async function checkToken(t){
+  const h = {Authorization:`Bearer ${t}`, Accept:"application/vnd.github+json"};
+  if (!/^(github_pat_|ghp_)/.test(t)) return {ok:false, text:"Dit lijkt geen GitHub-token: hij moet beginnen met <b>github_pat_</b>. Is hij volledig gekopieerd?"};
+  const u = await fetch("https://api.github.com/user", {headers:h});
+  if (u.status === 401) return {ok:false, text:"<b>401: GitHub herkent deze token niet.</b> Hij is niet volledig gekopieerd, verlopen of ingetrokken. Maak een nieuwe en kopieer hem direct na het aanmaken."};
+  const w = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows`, {headers:h});
+  if (w.status === 403 || w.status === 404) return {ok:false, text:`<b>${w.status}: de token kan niet bij <b>${esc(META.repo)}</b>.</b> Zet bij de token <i>Repository access</i> op "Only select repositories" met <b>${esc(META.repo)}</b>, en <i>Permissions → Actions</i> op <b>Read and write</b>. Je kunt een bestaande token aanpassen via GitHub → Settings → Developer settings → Fine-grained tokens.`};
+  if (!w.ok) return {ok:false, text:`GitHub gaf status ${w.status}. Probeer het later opnieuw.`};
+  return {ok:true, text:"✓ Token werkt en heeft toegang tot je dashboard. (Of hij ook <b>schrijfrechten</b> voor Actions heeft, blijkt bij de eerste knop.)"};
+}
 function openCloudCfg(msg=""){
   const bg = document.createElement("div"); bg.className = "modal-bg";
   bg.innerHTML = `<div class="modal"><h3 style="margin:0">GitHub-koppeling</h3>
@@ -462,6 +474,7 @@ function openCloudCfg(msg=""){
       De token wordt alleen op dit apparaat bewaard.</p>
     <p class="cap" style="margin:0" id="sharedTok"></p>
     <input type="password" id="tokIn" placeholder="github_pat_…" value="${store.get("gh_token","")?"••••••••":""}">
+    <div id="tokMsg"></div>
     <div class="row"><button class="btn primary" id="tokSave">Opslaan</button><button class="btn" id="tokDel">Token verwijderen</button>
       <button class="btn" id="lockNow">Uitloggen op dit apparaat</button><button class="btn" id="cfgClose" style="margin-left:auto">Sluiten</button></div></div>`;
   document.body.appendChild(bg);
@@ -470,7 +483,14 @@ function openCloudCfg(msg=""){
     : "Tip: zet de token één keer als geheime sleutel <b>ACTIONS_TOKEN</b> in GitHub (script set_actions_token.ps1), dan werkt het op al je apparaten automatisch."; });
   const close = () => bg.remove();
   bg.querySelector("#cfgClose").onclick = close; bg.onclick = e => { if (e.target === bg) close(); };
-  bg.querySelector("#tokSave").onclick = () => { const v = bg.querySelector("#tokIn").value.trim(); if (v && !v.startsWith("•")) { store.set("gh_token", v); toast("Token opgeslagen"); } close(); };
+  bg.querySelector("#tokSave").onclick = async () => {
+    const v = bg.querySelector("#tokIn").value.trim();
+    if (!v || v.startsWith("•")) return close();
+    const msg = bg.querySelector("#tokMsg"); msg.className = "banner"; msg.textContent = "Token controleren…";
+    const res = await checkToken(v);
+    msg.className = `banner ${res.ok ? "" : "err"}`; msg.innerHTML = res.text;
+    if (res.ok){ store.set("gh_token", v); setTimeout(close, 1800); }
+  };
   bg.querySelector("#tokDel").onclick = () => { try { localStorage.removeItem("gh_token"); } catch {} toast("Token verwijderd"); close(); };
   bg.querySelector("#lockNow").onclick = () => { try { localStorage.removeItem("hs_key"); } catch {} location.reload(); };
 }
