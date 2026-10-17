@@ -1,0 +1,2 @@
+garminconnect[workout]>=0.3.19
+cryptography>=42

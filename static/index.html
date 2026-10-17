@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prestatiedashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f4f5f7;--bg2:#eceef2;--card:#ffffff;--text:#14171c;--muted:#6b7280;--faint:#9ca3af;--line:#e6e8ec;--chip:#f1f3f6;
+  --accent:#fc4c02;--accent2:#ff8a3d;--blue:#2563eb;--purple:#7c3aed;--green:#16a34a;--orange:#e88a00;--red:#dc2626;--teal:#0d9488;--pink:#db2777;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.06);--radius:16px;
+}
+:root[data-theme="dark"]{
+  --bg:#0c0e12;--bg2:#12151b;--card:#161a21;--text:#eceef1;--muted:#9aa3ae;--faint:#6b7480;--line:#252a33;--chip:#1f242c;
+  --blue:#60a5fa;--purple:#a78bfa;--green:#4ade80;--orange:#fbbf24;--red:#f87171;--teal:#2dd4bf;--pink:#f472b6;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c0e12;--bg2:#12151b;--card:#161a21;--text:#eceef1;--muted:#9aa3ae;--faint:#6b7480;--line:#252a33;--chip:#1f242c;
+    --blue:#60a5fa;--purple:#a78bfa;--green:#4ade80;--orange:#fbbf24;--red:#f87171;--teal:#2dd4bf;--pink:#f472b6;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ---------- header & tabs ---------- */
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.hbar{max-width:1320px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;color:#fff;flex:none}
+.brand h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.01em}
+.brand .sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctrl{display:flex;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--card);padding:7px 12px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.btn:hover{background:var(--chip)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.icon{padding:7px 9px}
+select.btn{appearance:none;padding-right:28px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat}
+nav.tabs{max-width:1320px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;padding:10px 14px 12px;cursor:pointer;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:7px;border-bottom:2px solid transparent;white-space:nowrap}
+.tab svg{width:17px;height:17px}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--accent);border-color:var(--accent)}
+@media (max-width:760px){
+  header{backdrop-filter:none;background:var(--card)}
+  .hbar{padding:10px 14px;gap:10px}
+  .brand{flex-basis:100%}
+  .ctrl{width:100%;justify-content:flex-end}
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--card);border-top:1px solid var(--line);justify-content:space-around;padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
+  .tab{flex-direction:column;gap:2px;font-size:10.5px;padding:6px 4px;border:0;flex:1;min-width:0}
+  .tab svg{width:20px;height:20px}
+  main{padding-bottom:90px!important}
+  .ctrl .lbl{display:none}
+}
+
+/* ---------- layout ---------- */
+main{max-width:1320px;margin:0 auto;padding:20px 16px 48px}
+.view{display:none;gap:16px}
+.view.on{display:grid}
+.grid{display:grid;gap:16px}.grid>*{min-width:0}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(520px,100%),1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr))}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);min-width:0}
+.card h3{margin:0 0 4px;font-size:15px;font-weight:650;letter-spacing:-.01em}
+.card .cap{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+.chart{position:relative;height:280px}
+.chart.sm{height:220px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.between{justify-content:space-between}
+.muted{color:var(--muted)}
+.section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:8px 2px -4px}
+
+/* ---------- hero ---------- */
+.hero{position:relative;overflow:hidden;border-radius:22px;padding:24px;color:#fff;
+  background:radial-gradient(1200px 400px at 110% -20%,rgba(255,255,255,.18),transparent 60%),linear-gradient(135deg,#fc4c02 0%,#ff6a1a 45%,#ff9248 100%);box-shadow:0 10px 30px rgba(252,76,2,.25)}
+:root[data-theme="dark"] .hero{background:radial-gradient(1200px 400px at 110% -20%,rgba(255,255,255,.10),transparent 60%),linear-gradient(135deg,#c43a00 0%,#e2560c 50%,#f07a2c 100%)}
+.hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:28px;align-items:center}
+@media (max-width:900px){.hero-grid{grid-template-columns:1fr;gap:18px}}
+.ring{width:150px;height:150px;position:relative;flex:none}
+.ring svg{transform:rotate(-90deg)}
+.ring .c{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
+.ring .pct{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1}
+.ring .pl{font-size:11px;opacity:.85;margin-top:2px}
+.hero .eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.hero .goal{font-size:34px;font-weight:800;letter-spacing:-.02em;margin:2px 0 6px;line-height:1.1}
+.hero .goal small{font-size:16px;font-weight:600;opacity:.85}
+.hero .stat-row{display:flex;flex-wrap:wrap;gap:22px;margin-top:14px}
+.hero .stat .k{font-size:11.5px;opacity:.8;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.hero .stat .v{font-size:20px;font-weight:750}
+.hero .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.28);padding:4px 10px;border-radius:999px;font-weight:600;font-size:12.5px}
+.goal-edit{display:grid;gap:8px;min-width:220px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:14px}
+.goal-edit label{font-size:11.5px;font-weight:600;opacity:.9;text-transform:uppercase;letter-spacing:.05em}
+.goal-edit input{width:100%;background:rgba(255,255,255,.95);color:#14171c;border:0;border-radius:9px;padding:8px 10px;font-weight:600}
+.goal-edit .btn{background:#fff;color:var(--accent);border:0;justify-content:center;font-weight:700}
+.goal-edit .msg{font-size:12px;min-height:16px}
+.timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}
+.timeline div{background:rgba(255,255,255,.14);border-radius:10px;padding:8px 10px}
+.timeline .k{font-size:11px;opacity:.85;white-space:nowrap}
+.timeline .v{font-weight:750;font-size:16px}
+.timeline .r{font-size:11px;opacity:.75}
+
+/* ---------- tegel-indeling: nooit 4+1, wel 5 op een rij of 3+2 ---------- */
+.tiles{grid-template-columns:repeat(5,1fr)}
+.tiles[data-n="2"]{grid-template-columns:repeat(2,1fr)}
+.tiles[data-n="3"]{grid-template-columns:repeat(3,1fr)}
+.tiles[data-n="4"]{grid-template-columns:repeat(4,1fr)}
+.tiles[data-n="5"]{grid-template-columns:repeat(5,1fr)}
+.tiles[data-n="6"]{grid-template-columns:repeat(6,1fr)}
+@media (max-width:1180px){ .tiles[data-n="5"],.tiles[data-n="6"]{grid-template-columns:repeat(3,1fr)} }
+@media (max-width:900px){ .tiles[data-n="4"]{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:600px){
+  .tiles[data-n]{grid-template-columns:repeat(2,1fr)}
+  .tiles[data-n="3"] > :last-child, .tiles[data-n="5"] > :last-child{grid-column:span 2}
+}
+
+/* ---------- analyse, suggestie, focus ---------- */
+.zbar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--chip)}
+.zbar span{display:block;height:100%}
+.zlegend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin-top:6px}
+.zlegend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+.tiplist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.tiplist li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.45}
+.tiplist .dot{flex:none;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;margin-top:1px}
+.tiplist .dot svg{width:13px;height:13px}
+.tiplist .good .dot{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+.tiplist .warn .dot{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange)}
+.tiplist .neutral .dot{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue)}
+.ctxchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.ctxchips span{font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--muted)}
+.ctxchips b{color:var(--text);font-weight:650}
+.steps{display:grid;gap:6px;margin:12px 0}
+.step{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--bg2);border-radius:10px;padding:8px 12px;font-size:13px}
+.step .t{font-weight:700;font-variant-numeric:tabular-nums;min-width:52px}
+.step .tg{color:var(--muted);font-size:12px;text-align:right}
+.step.rep{grid-template-columns:1fr;background:none;border:1px dashed var(--line)}
+.step.rep .inner{display:grid;gap:6px}
+.sug-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.sug-title{font-size:20px;font-weight:750;letter-spacing:-.01em;margin:2px 0}
+.focus{display:grid;gap:12px}
+.focus-item{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--bg2)}
+.focus-item h4{margin:0;font-size:14px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.focus-item .cue{margin:8px 0 4px;font-size:13px}
+.focus-item .drill{font-size:12.5px;color:var(--muted)}
+.focus-item .res{margin-top:10px;font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ---------- tiles ---------- */
+.tile{position:relative;overflow:hidden}
+.tile .k{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}
+.tile .k i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.tile .v{font-size:28px;font-weight:750;letter-spacing:-.02em;margin-top:4px;line-height:1.15}
+.tile .v small{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
+.tile .s{font-size:12px;color:var(--muted);margin-top:2px;min-height:18px;max-width:56%;line-height:1.35}
+.tile svg.spark{position:absolute;right:14px;bottom:14px;width:38%;height:36px;opacity:.95}
+.delta{font-weight:650}.delta.up{color:var(--green)}.delta.down{color:var(--red)}
+
+/* ---------- misc ---------- */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-weight:650;font-size:12px;white-space:nowrap;background:var(--chip);color:var(--muted)}
+.badge.green{color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
+.badge.orange{color:var(--orange);background:color-mix(in srgb,var(--orange) 16%,transparent)}
+.badge.red{color:var(--red);background:color-mix(in srgb,var(--red) 14%,transparent)}
+.badge.blue{color:var(--blue);background:color-mix(in srgb,var(--blue) 14%,transparent)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;cursor:pointer;font-weight:600;font-size:12.5px;color:var(--muted)}
+.chip.on{background:var(--text);color:var(--card);border-color:var(--text)}
+.ins{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.insight{display:flex;gap:12px;padding:14px;border-radius:14px;background:var(--bg2);border:1px solid var(--line)}
+.insight .ic{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center}
+.insight .ic svg{width:18px;height:18px}
+.insight.good .ic{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+.insight.warn .ic{background:color-mix(in srgb,var(--orange) 18%,transparent);color:var(--orange)}
+.insight.neutral .ic{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue)}
+.insight.info .ic{background:color-mix(in srgb,var(--purple) 14%,transparent);color:var(--purple)}
+.insight b{display:block;margin-bottom:2px}
+.insight p{margin:0;color:var(--muted);font-size:13px}
+.tablewrap{overflow-x:auto;margin:0 -4px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}
+th{color:var(--faint);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+tr:last-child td{border-bottom:0}
+td .r{display:block;color:var(--faint);font-size:11.5px}
+.banner{border-radius:14px;padding:12px 16px;border:1px solid var(--line);background:var(--card);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.banner.laag{border-color:color-mix(in srgb,var(--orange) 50%,var(--line));background:color-mix(in srgb,var(--orange) 8%,var(--card))}
+.banner.err{border-color:var(--red);background:color-mix(in srgb,var(--red) 8%,var(--card))}
+.empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px;font-size:13px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+.kv div{background:var(--bg2);border-radius:12px;padding:10px 12px}
+.kv .k{font-size:11.5px;color:var(--muted);font-weight:600}
+.kv .v{font-size:18px;font-weight:700}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.scen-times{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:12px}
+.scen-times div{background:var(--bg2);border-radius:12px;padding:10px 12px}
+.scen-times .v{font-size:20px;font-weight:750}
+.seg{display:inline-flex;background:var(--chip);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:5px 11px;border-radius:8px;cursor:pointer;font-weight:600;color:var(--muted);font-size:12.5px}
+.seg button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow)}
+
+/* ---------- activiteiten ---------- */
+.search{width:100%;max-width:340px;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 12px}
+.acts{display:grid;gap:8px}
+.act{display:grid;grid-template-columns:62px 1fr repeat(4,minmax(70px,auto));gap:14px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card);cursor:pointer;transition:transform .08s,box-shadow .15s}
+.act:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+.act .d{text-align:center;background:var(--bg2);border-radius:10px;padding:6px 0;line-height:1.15}
+.act .d b{font-size:17px;display:block}.act .d span{font-size:11px;color:var(--muted)}
+.act .n{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.act .n small{display:block;color:var(--muted);font-weight:500;font-size:12px}
+.act .m{text-align:right}.act .m b{display:block;font-size:15px}.act .m span{font-size:11px;color:var(--muted)}
+@media (max-width:760px){.act{grid-template-columns:52px 1fr auto auto}.act .m.x{display:none}}
+.drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(760px,100%);background:var(--bg);z-index:41;transform:translateX(100%);transition:transform .25s ease;overflow-y:auto;box-shadow:-10px 0 40px rgba(0,0,0,.2)}
+.drawer.on{transform:none}.drawer-bg.on{opacity:1;pointer-events:auto}
+.drawer .head{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:2}
+.drawer .body{padding:16px;display:grid;gap:14px}
+.lock{position:fixed;inset:0;z-index:60;background:var(--bg);display:grid;place-items:center;padding:20px}
+.lock .box{width:min(380px,100%);background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;box-shadow:var(--shadow);display:grid;gap:12px}
+.lock input[type=password],.modal input{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;font:inherit;color:var(--text)}
+.modal-bg{position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:20px}
+.modal{width:min(460px,100%);background:var(--card);border-radius:18px;padding:22px;display:grid;gap:12px;box-shadow:var(--shadow)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;background:var(--text);color:var(--card);padding:10px 16px;border-radius:12px;font-weight:600;font-size:13px;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+@media (max-width:760px){.toast{bottom:84px}}
+.skeleton{background:linear-gradient(90deg,var(--chip),var(--bg2),var(--chip));background-size:200% 100%;animation:sh 1.2s infinite;border-radius:var(--radius);min-height:120px}
+@keyframes sh{to{background-position:-200% 0}}
+.spin{animation:rot 1s linear infinite}@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <div class="brand">
+      <div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 4 8-10"/><path d="M14 5h6v6"/></svg></div>
+      <div style="min-width:0"><h1>Prestatiedashboard</h1><div class="sub" id="sub">Laden…</div></div>
+    </div>
+    <div class="ctrl">
+      <select class="btn" id="period" title="Periode"><option value="8">8 weken</option><option value="12">12 weken</option><option value="26">26 weken</option><option value="52">52 weken</option></select>
+      <button class="btn icon" id="cloudCfg" title="GitHub-instellingen" style="display:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button>
+      <button class="btn icon" id="theme" title="Licht/donker"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
+      <button class="btn primary" id="sync"><svg id="syncIc" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M21 12a9 9 0 01-15.5 6.2M3 12A9 9 0 0118.5 5.8"/><path d="M21 4v5h-5M3 20v-5h5"/></svg><span class="lbl">Synchroniseren</span></button>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs"></nav>
+</header>
+
+<main>
+  <div id="banner" style="margin-bottom:16px"></div>
+
+  <!-- OVERZICHT -->
+  <section class="view" data-view="overzicht">
+    <div class="hero" id="hero"><div class="skeleton" style="min-height:180px;opacity:.3"></div></div>
+    <div class="grid g2">
+      <div class="card" id="sugCard"></div>
+      <div class="card" id="lastCard"></div>
+    </div>
+    <div class="grid tiles" id="tiles"></div>
+    <div class="grid g2">
+      <div class="card"><div class="row between"><div><h3>Inzichten</h3><p class="cap">Automatisch uit je data, per categorie</p></div><div class="chips" id="insChips"></div></div><div class="ins" id="insights"></div></div>
+      <div class="card" id="thisWeek"></div>
+    </div>
+    <div class="card" id="focusMini"></div>
+  </section>
+
+  <!-- PRESTATIES -->
+  <section class="view" data-view="prestaties">
+    <div class="card"><h3>Prestatieniveau en projectie</h3><p class="cap">VDOT per week (◆ = maximale inspanning, ● = schatting uit hartslag), trend en 12 weken vooruit met onzekerheidsband. Garmin VO2max ter vergelijking.</p><div class="chart" style="height:320px"><canvas id="cVdot"></canvas></div></div>
+    <div class="card"><div class="row between"><div><h3>Voorspelde wedstrijdtijden</h3><p class="cap" id="predCap"></p></div></div><div class="tablewrap"><table id="predTable"></table></div></div>
+    <div class="grid g2">
+      <div class="card"><h3>Beste prestaties</h3><p class="cap">Snelste stukken uit je runs, laatste 90 dagen</p><div class="tablewrap"><table id="best"></table></div></div>
+      <div class="card"><h3>Garmin-fysiologie</h3><p class="cap">Lactaatdrempel en scores die je horloge berekent</p><div id="garminPhys"></div></div>
+    </div>
+  </section>
+
+  <!-- TRAINING -->
+  <section class="view" data-view="training">
+    <div class="grid tiles" id="trTiles"></div>
+    <div class="grid g2">
+      <div class="card"><h3>Weekomvang</h3><p class="cap">Kilometers, langste run en hoogtemeters</p><div class="chart"><canvas id="cVol"></canvas></div></div>
+      <div class="card"><h3>Belasting</h3><p class="cap">Fitheid (CTL), vermoeidheid (ATL) en vorm (TSB)</p><div class="chart"><canvas id="cLoad"></canvas></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="row between"><div><h3>Intensiteitsverdeling</h3><p class="cap" id="zonesCap">Aandeel per zone. Doel: ~80% rustig</p></div><div class="seg" id="zoneSeg"><button data-z="hr" class="on">Hartslag</button><button data-z="pace">Tempo</button></div></div><div class="chart"><canvas id="cZones"></canvas></div></div>
+      <div class="card"><h3>Training Effect per run</h3><p class="cap">Garmin: aeroob (x) tegen anaeroob (y), 0–5</p><div class="chart" id="teWrap"><canvas id="cTe"></canvas></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>Gevoel tegen belasting</h3><p class="cap">RPE (1–10) per run tegen trainingsbelasting: hoge RPE bij lage belasting kan op vermoeidheid wijzen</p><div class="chart sm"><canvas id="cRpe"></canvas></div></div>
+      <div class="card"><h3>Wat als ik dit doorzet?</h3><p class="cap">Kies je kilometers per week</p>
+        <div class="row between"><b id="kmVal" class="tnum" style="font-size:22px"></b><span class="muted" id="scBasis"></span></div>
+        <input type="range" id="km" min="0" max="100" step="1">
+        <div class="chart sm" style="height:150px;margin-top:8px"><canvas id="cScen"></canvas></div>
+        <div class="scen-times" id="scTimes"></div><p class="cap" id="scNote" style="margin:10px 0 0"></p></div>
+    </div>
+  </section>
+
+  <!-- HERSTEL -->
+  <section class="view" data-view="herstel">
+    <div class="grid tiles" id="recTiles"></div>
+    <div class="grid g2">
+      <div class="card"><h3>HRV</h3><p class="cap">Nachtelijke HRV met je normale bandbreedte (Garmin)</p><div class="chart"><canvas id="cHrv"></canvas></div></div>
+      <div class="card"><h3>Slaap</h3><p class="cap">Slaapfasen (uren) en slaapscore</p><div class="chart"><canvas id="cSleep"></canvas></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>Body Battery &amp; stress</h3><p class="cap">Hoogste en laagste Body Battery per dag, gemiddelde stress</p><div class="chart" id="bbWrap"><canvas id="cBb"></canvas></div></div>
+      <div class="card"><h3>Rusthartslag &amp; Training Readiness</h3><p class="cap">Lager rustpols + hogere readiness = beter hersteld</p><div class="chart"><canvas id="cRhr"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Hartslagherstel na inspanning</h3><p class="cap">Daling in slagen binnen 60 s na je hardste stuk (hoger = fitter)</p><div class="chart sm"><canvas id="cHrr"></canvas></div></div>
+  </section>
+
+  <!-- TECHNIEK -->
+  <section class="view" data-view="techniek">
+    <div class="card" id="focusCard"></div>
+    <div class="grid tiles" id="techTiles"></div>
+    <div class="card"><h3>Wat is goed?</h3><p class="cap">Garmin-categorieën op basis van percentielen van alle Garmin-hardlopers. Jouw waarde is de mediaan van de laatste week met data.</p><div class="tablewrap"><table id="techRef"></table></div>
+      <p class="cap" style="margin:12px 0 0">Let op: cadans, grondcontact en oscillatie hangen sterk af van je tempo. Op rustige runs zijn ze vanzelf "slechter" dan bij tempowerk, dus vergelijk jezelf vooral met jezelf bij hetzelfde tempo. Paslengte hangt af van je lengte en tempo, en vermogen/efficiëntie van je gewicht en horloge: daarvoor bestaat geen algemene norm, alleen je eigen trend.</p></div>
+    <div class="grid g2">
+      <div class="card"><h3>Cadans &amp; paslengte</h3><p class="cap">Mediaan per week. Achtergrondkleur = Garmin-categorie voor cadans</p><div class="chart"><canvas id="cCad"></canvas></div></div>
+      <div class="card"><h3>Verticale oscillatie &amp; ratio</h3><p class="cap">Minder op-en-neer per meter vooruit = zuiniger lopen. Achtergrond = categorie voor oscillatie</p><div class="chart"><canvas id="cVo"></canvas></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>Grondcontact</h3><p class="cap">Tijd (ms) en aandeel van de pas (%). Achtergrond = categorie voor grondcontacttijd</p><div class="chart"><canvas id="cGct"></canvas></div></div>
+      <div class="card"><h3>Vermogen &amp; efficiëntie</h3><p class="cap">Loopvermogen (W) en snelheid per watt (m/min per W)</p><div class="chart"><canvas id="cPow"></canvas></div></div>
+    </div>
+    <div class="card"><h3>Aerobe fitheid: tempo bij hartslag <span id="hrRef"></span></h3><p class="cap">Sneller bij dezelfde hartslag = fitter. Balken: ontkoppeling op lange runs (lager is beter)</p><div class="chart"><canvas id="cPace"></canvas></div></div>
+  </section>
+
+  <!-- ZONES -->
+  <section class="view" data-view="zones">
+    <div class="grid tiles" id="zTiles"></div>
+    <div id="zNote"></div>
+    <div id="watchZones"></div>
+    <div class="grid g2">
+      <div class="card"><h3>Drempeltempo door de tijd</h3><p class="cap">Garmin (lactaatdrempel) en het model (uit je VDOT) bewegen allebei mee met je conditie.</p><div class="chart"><canvas id="cThr"></canvas></div></div>
+      <div class="card"><h3>Trainingstempo's (Daniels)</h3><p class="cap" id="dCap"></p><div class="tablewrap"><table id="dTable"></table></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="row between"><div><h3>Tempozones</h3><p class="cap" id="pzCap"></p></div><div class="seg" id="pzSeg"><button data-s="garmin" class="on">Garmin</button><button data-s="model">Model</button></div></div><div class="tablewrap"><table id="pzTable"></table></div></div>
+      <div class="card"><div class="row between"><div><h3>Hartslagzones</h3></div><div class="seg" id="hzSeg"><button data-s="model">Model</button><button data-s="garmin">Garmin</button></div></div><p class="cap" id="hzCap"></p><div class="tablewrap"><table id="hzTable"></table></div></div>
+    </div>
+  </section>
+
+  <!-- ACTIVITEITEN -->
+  <section class="view" data-view="activiteiten">
+    <div class="row between"><input class="search" id="q" placeholder="Zoek op naam of datum…"><span class="muted" id="actCount"></span></div>
+    <div class="acts" id="acts"></div>
+  </section>
+</main>
+
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer"><div class="head"><div><b id="dTitle"></b><div class="muted" id="dSub" style="font-size:12.5px"></div></div><button class="btn icon" id="dClose">✕</button></div><div class="body" id="dBody"></div></aside>
+
+<script>
+// ===================================================================== utils
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const mmss = s => s==null ? "–" : `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,"0")}`;
+const hms = s => { if (s==null) return "–"; s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return h?`${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}`:`${m}:${String(x).padStart(2,"0")}`; };
+const fmt = (v, d=0) => v==null ? "–" : (+v).toLocaleString("nl-NL", {minimumFractionDigits:d, maximumFractionDigits:d});
+const store = { get(k, d){ try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set(k, v){ try { localStorage.setItem(k, v); } catch {} } };
+const MONTHS = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"], DAYS = ["zo","ma","di","wo","do","vr","za"];
+const isoWeek = ds => { const d = new Date(ds+"T12:00:00"); d.setDate(d.getDate()+3-((d.getDay()+6)%7)); const y = new Date(d.getFullYear(),0,4); return 1+Math.round(((d-y)/864e5-3+((y.getDay()+6)%7))/7); };
+const dayLabel = ds => { const d = new Date(ds+"T12:00:00"); return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} · wk ${isoWeek(ds)}`; };
+let D = null, charts = {}, kmTimer = null, insCat = "alle", zoneMode = "hr", insAll = false;
+
+const ICONS = {
+  overzicht:'<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
+  prestaties:'<path d="M3 17l5-6 4 4 8-10"/><path d="M14 5h6v6"/>',
+  training:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  herstel:'<path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 000-7.8z"/>',
+  techniek:'<circle cx="13" cy="4" r="2"/><path d="M7 21l3-6 3 2v4M10 15l1-5 4 3 3-1M6 12l3-3 3 1"/>',
+  zones:'<path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 6a6 6 0 100 12 6 6 0 000-12z"/><circle cx="12" cy="12" r="2"/>',
+  activiteiten:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+};
+const TAB_NAMES = {overzicht:"Overzicht", prestaties:"Prestaties", training:"Training", herstel:"Herstel", techniek:"Techniek", zones:"Zones", activiteiten:"Activiteiten"};
+const svgI = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const INS_IC = {good:'<path d="M20 6L9 17l-5-5"/>', warn:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>', neutral:'<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>', info:'<path d="M12 2l3 7h7l-5.5 4.5 2 7.5-6.5-4.5L5.5 21l2-7.5L2 9h7z"/>'};
+
+const STATIC = !!window.HS_STATIC;
+let CK = null, META = null, DCACHE = {};
+async function api(path, body){
+  if (STATIC) return staticApi(path, body);
+  const r = await fetch(path, body!==undefined ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j;
+}
+
+// ---------- online-modus (GitHub Pages)
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const toB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+function toast(msg, ms=4000){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), ms); }
+async function fetchMeta(){ META = await fetch(`data/meta.json?t=${Date.now()}`).then(r=>r.json()); return META; }
+async function decryptFile(name, key=CK){
+  const buf = await fetch(`data/${name}?b=${encodeURIComponent(META.built_at)}`).then(r=>{ if(!r.ok) throw new Error(`${name} niet gevonden`); return r.arrayBuffer(); });
+  const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv:new Uint8Array(buf,0,12)}, key, new Uint8Array(buf,12));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function sget(name){ return DCACHE[name] ??= await decryptFile(name); }
+async function deriveKey(pw){
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt:b64(META.salt), iterations:META.iterations, hash:"SHA-256"}, base,
+    {name:"AES-GCM", length:256}, true, ["decrypt"]);
+}
+async function staticApi(path, body){
+  if (body === undefined){
+    const u = new URL(path, location.origin);
+    if (u.pathname.endsWith("/api/dashboard")){
+      const w = META.periods.includes(+u.searchParams.get("weeks")) ? u.searchParams.get("weeks") : "12";
+      const p = structuredClone(await sget(`dash-${w}.enc`));
+      if (u.searchParams.get("km") != null){
+        const sc = await sget("scenarios.enc"), k = String(Math.max(0, Math.min(100, Math.round(+u.searchParams.get("km")/5)*5)));
+        if (sc[k]) p.training.scenario = sc[k];
+      }
+      return p;
+    }
+    if (u.pathname.endsWith("/api/run")){
+      const d = (await sget("runs.enc"))[u.searchParams.get("id")];
+      if (!d) throw new Error("Details zijn online alleen beschikbaar voor runs van de laatste 120 dagen.");
+      return d;
+    }
+    throw new Error("Onbekend verzoek");
+  }
+  return dispatchAction(path.split("/").pop(), body || {});
+}
+async function dispatchAction(action, args){
+  const token = store.get("gh_token", "");
+  if (!token){ openCloudCfg("Vul eerst je GitHub-token in om acties vanaf deze site te starten."); throw new Error("Geen GitHub-token ingesteld"); }
+  const r = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows/${META.workflow}/dispatches`, {method:"POST",
+    headers:{Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json"},
+    body:JSON.stringify({ref:"main", inputs:{action, args:JSON.stringify(args)}})});
+  if (r.status !== 204){ const t = await r.text(); throw new Error(`GitHub weigerde de actie (${r.status}). ${r.status===401||r.status===403?"Controleer je token.":t.slice(0,120)}`); }
+  toast("Actie gestart op GitHub. Het dashboard ververst vanzelf zodra hij klaar is (1–3 min).", 6000);
+  waitForBuild(META.built_at);
+  return {queued:true};
+}
+let waiting = null;
+function waitForBuild(prev){
+  clearInterval(waiting); const t0 = Date.now();
+  $("#sub").textContent = "Bezig met bijwerken op GitHub…";
+  waiting = setInterval(async () => {
+    try { const m = await fetch(`data/meta.json?t=${Date.now()}`).then(r=>r.json());
+      if (m.built_at !== prev){ clearInterval(waiting); META = m; DCACHE = {}; toast("Bijgewerkt ✓"); load(); }
+      else if (Date.now()-t0 > 10*60e3){ clearInterval(waiting); toast("Duurt langer dan verwacht; kijk bij Actions op GitHub."); load(); }
+    } catch {}
+  }, 15000);
+}
+function openCloudCfg(msg=""){
+  const bg = document.createElement("div"); bg.className = "modal-bg";
+  bg.innerHTML = `<div class="modal"><h3 style="margin:0">GitHub-koppeling</h3>
+    ${msg?`<div class="banner laag">${esc(msg)}</div>`:""}
+    <p class="cap" style="margin:0">Met een GitHub-token kun je vanaf dit apparaat synchroniseren, je doel wijzigen en trainingen of zones naar je Garmin sturen.
+      Maak een <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a> met alleen toegang tot <b>${esc(META.repo)}</b> en de permissie <b>Actions: Read and write</b>.
+      De token wordt alleen op dit apparaat bewaard.</p>
+    <input type="password" id="tokIn" placeholder="github_pat_…" value="${store.get("gh_token","")?"••••••••":""}">
+    <div class="row"><button class="btn primary" id="tokSave">Opslaan</button><button class="btn" id="tokDel">Token verwijderen</button>
+      <button class="btn" id="lockNow">Uitloggen op dit apparaat</button><button class="btn" id="cfgClose" style="margin-left:auto">Sluiten</button></div></div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.querySelector("#cfgClose").onclick = close; bg.onclick = e => { if (e.target === bg) close(); };
+  bg.querySelector("#tokSave").onclick = () => { const v = bg.querySelector("#tokIn").value.trim(); if (v && !v.startsWith("•")) { store.set("gh_token", v); toast("Token opgeslagen"); } close(); };
+  bg.querySelector("#tokDel").onclick = () => { try { localStorage.removeItem("gh_token"); } catch {} toast("Token verwijderd"); close(); };
+  bg.querySelector("#lockNow").onclick = () => { try { localStorage.removeItem("hs_key"); } catch {} location.reload(); };
+}
+async function unlock(){
+  await fetchMeta();
+  const saved = store.get("hs_key", "");
+  if (saved){
+    try { CK = await crypto.subtle.importKey("raw", b64(saved), "AES-GCM", true, ["decrypt"]); await sget("dash-12.enc"); return; }
+    catch { CK = null; DCACHE = {}; }
+  }
+  return new Promise(resolve => {
+    const el = document.createElement("div"); el.className = "lock";
+    el.innerHTML = `<form class="box"><div class="logo" style="width:44px;height:44px;border-radius:13px">${svgI('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>')}</div>
+      <h2 style="margin:0;font-size:20px">Prestatiedashboard</h2><p class="muted" style="margin:0">Je gegevens zijn versleuteld. Vul je wachtwoord in.</p>
+      <input type="password" id="pw" autocomplete="current-password" placeholder="Wachtwoord" autofocus>
+      <label class="muted" style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="rem" checked> Onthouden op dit apparaat</label>
+      <button class="btn primary" style="justify-content:center">Openen</button><div id="pwMsg" class="muted" style="min-height:18px;font-size:13px"></div></form>`;
+    document.body.appendChild(el);
+    el.querySelector("form").onsubmit = async e => {
+      e.preventDefault(); el.querySelector("#pwMsg").textContent = "Ontsleutelen…";
+      try {
+        const k = await deriveKey(el.querySelector("#pw").value);
+        DCACHE["dash-12.enc"] = await decryptFile("dash-12.enc", k); CK = k;
+        if (el.querySelector("#rem").checked) store.set("hs_key", toB64(await crypto.subtle.exportKey("raw", k)));
+        el.remove(); resolve();
+      } catch { el.querySelector("#pwMsg").textContent = "Onjuist wachtwoord."; }
+    };
+  });
+}
+
+// ===================================================================== charts
+function mk(id, cfg){ charts[id]?.destroy(); const el = document.getElementById(id); if (!el) return; charts[id] = new Chart(el, cfg); }
+// Gekleurde achtergrondbanden (bijv. referentiewaarden) op een y-as
+Chart.register({id:"bands", beforeDatasetsDraw(chart, args, o){
+  if (!o || !o.list) return; const {ctx, chartArea:a} = chart, sc = chart.scales[o.axis||"y"]; if (!sc) return;
+  o.list.forEach(([lo, hi, col]) => { const p0 = sc.getPixelForValue(lo), p1 = sc.getPixelForValue(hi);
+    const top = Math.max(a.top, Math.min(p0,p1)), bot = Math.min(a.bottom, Math.max(p0,p1)); if (bot <= top) return;
+    ctx.save(); ctx.fillStyle = col; ctx.fillRect(a.left, top, a.right-a.left, bot-top); ctx.restore(); });
+}});
+function opts({y={}, y1=null, x={}, legend=true, tooltipTitle=null, extra={}, bands=null}={}){
+  const o = {responsive:true, maintainAspectRatio:false, interaction:{mode:"index", intersect:false}, animation:{duration:400},
+    plugins:{legend:{display:legend, position:"top", align:"end", labels:{boxWidth:8, boxHeight:8, usePointStyle:true, padding:14}},
+      tooltip:{backgroundColor:css("--card"), titleColor:css("--text"), bodyColor:css("--muted"), borderColor:css("--line"), borderWidth:1, padding:10, cornerRadius:10,
+        callbacks:tooltipTitle?{title:tooltipTitle}:{}}},
+    scales:{x:{grid:{display:false}, border:{display:false}, ticks:{maxRotation:0, autoSkipPadding:12}, ...x}, y:{grid:{color:css("--line")}, border:{display:false}, ...y}}, ...extra};
+  if (y1) o.scales.y1 = {position:"right", grid:{display:false}, border:{display:false}, ...y1};
+  if (bands) { o.plugins = o.plugins || {}; o.plugins.bands = bands; }
+  return o;
+}
+const weekTip = rows => items => { const r = rows[items[0].dataIndex]; return r ? `${r.label} · ${r.range}` : ""; };
+// Daglabels: alleen op maandag het weeknummer tonen
+const dayTicks = days => ({ticks:{autoSkip:false, maxRotation:0, callback:(v,i)=>{ const d = new Date(days[i]+"T12:00:00"); return d.getDay()===1 ? `wk ${isoWeek(days[i])}` : ""; }}});
+const dayTip = days => items => dayLabel(days[items[0].dataIndex]);
+const alpha = (c, a) => c + Math.round(a*255).toString(16).padStart(2,"0");
+function spark(values, color){
+  const v = values.map(x => x==null ? null : +x), vals = v.filter(x=>x!=null);
+  if (vals.length < 2) return "";
+  const min = Math.min(...vals), max = Math.max(...vals), r = (max-min)||1, W=100, H=30;
+  const pts = v.map((x,i)=> x==null?null:[i/(v.length-1)*W, H-2-(x-min)/r*(H-4)]).filter(Boolean);
+  const d = pts.map((p,i)=>`${i?"L":"M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join("");
+  const area = `${d}L${pts[pts.length-1][0]},${H}L${pts[0][0]},${H}Z`;
+  const id = "g"+Math.random().toString(36).slice(2,8);
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".25"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="${area}" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/><circle cx="${pts[pts.length-1][0]}" cy="${pts[pts.length-1][1]}" r="2.5" fill="${color}"/></svg>`;
+}
+const tile = (k, v, s="", color="--accent", sp=null) => `<div class="card tile"><div class="k"><i style="background:${css(color)}"></i>${k}</div><div class="v tnum">${v}</div><div class="s">${s}</div>${sp?spark(sp, css(color)):""}</div>`;
+const needGarmin = what => `<div class="empty">${what} komt direct uit Garmin Connect.<br>Draai één keer <code>python garmin_login.py</code> en klik daarna op Synchroniseren.</div>`;
+
+// ===================================================================== analyse-componenten
+const TIP_IC = {good:'<path d="M20 6L9 17l-5-5"/>', warn:'<path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/>', neutral:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'};
+function zoneBar(pcts, rows){
+  if (!pcts) return "";
+  const names = rows || D.zones.hr_zones_by?.[D.zones.hr_active] || [];
+  return `<div class="zbar">${pcts.map((p,i)=>p?`<span title="Z${i+1}: ${p}%" style="width:${p}%;background:${css(ZCOL[i])}"></span>`:"").join("")}</div>
+    <div class="zlegend">${pcts.map((p,i)=>`<span><i style="background:${css(ZCOL[i])}"></i>Z${i+1} ${p}%${names[i]?.from||names[i]?.to?` <span style="opacity:.7">(${names[i].from?names[i].from+"–":"≤"}${names[i].to})</span>`:""}</span>`).join("")}</div>`;
+}
+const tipList = (items) => items.length ? `<ul class="tiplist">${items.map(t=>`<li class="${t.tone}"><span class="dot">${svgI(TIP_IC[t.tone]||TIP_IC.neutral)}</span><span>${esc(t.text)}</span></li>`).join("")}</ul>` : "";
+function ctxChips(c, a){
+  const x = [];
+  if (c.readiness!=null) x.push(`Readiness <b>${c.readiness}</b>`);
+  if (c.sleep_h) x.push(`Slaap <b>${fmt(c.sleep_h,1)} u</b>`);
+  if (c.hrv_status) x.push(`HRV <b>${esc(prettify(c.hrv_status))}</b>`);
+  if (c.acwr) x.push(`Acuut/chronisch <b>${fmt(c.acwr,1)}</b>`);
+  if (c.prev_day) x.push(`Gisteren <b>${esc(c.prev_day.type.toLowerCase())}</b>`);
+  else if (c.days_since_hard!=null) x.push(`Laatste zware training <b>${c.days_since_hard} d</b> geleden`);
+  if (c.temp_c!=null) x.push(`<b>${c.temp_c} °C</b>${c.humidity?`, ${c.humidity}% vocht`:""}`);
+  if (a && a.pacing) x.push(`Tempo 1e → 2e helft <b>${mmss(a.pacing.first)} → ${mmss(a.pacing.second)}</b>`);
+  return x.length ? `<div class="ctxchips">${x.map(v=>`<span>${v}</span>`).join("")}</div>` : "";
+}
+function sessionBlock(a, full){
+  const tips = full ? [...a.good, ...a.tips] : [...a.tips.filter(t=>t.tone==="warn"), ...a.good, ...a.tips.filter(t=>t.tone!=="warn")].slice(0,3);
+  return `<div class="row between"><span class="badge blue">${esc(a.type_label)}</span><span class="badge ${a.verdict_cls}">${esc(a.verdict)}</span></div>
+    <div style="margin-top:12px">${zoneBar(a.zones_pct)}</div>
+    ${ctxChips(a.context, a)}
+    ${tipList(tips)}`;
+}
+function stepRow(st){
+  if (st.kind==="repeat") return `<div class="step rep"><div class="muted" style="font-size:12px;font-weight:600">${st.n}× herhalen</div><div class="inner">${st.steps.map(stepRow).join("")}</div></div>`;
+  const tgt = [st.hr?`${st.hr[0]}–${st.hr[1]} bpm`:null, st.pace_txt?`${st.pace_txt}/km`:null].filter(Boolean).join(" · ");
+  const lbl = st.label || {warmup:"Inlopen", cooldown:"Uitlopen", recovery:"Herstel", interval:"Blok", run:"Lopen"}[st.kind];
+  return `<div class="step"><span class="t">${st.secs>=60?Math.round(st.secs/60)+" min":st.secs+" s"}</span><span>${esc(lbl)}</span><span class="tg">${tgt}</span></div>`;
+}
+function renderSuggestion(){
+  const sg = D.overview.suggestion;
+  if (!sg){ $("#sugCard").innerHTML = `<h3>Training</h3><div class="empty">Nog geen suggestie: te weinig data.</div>`; return; }
+  const when = sg.for_today ? "Vandaag" : `Morgen (${sg.weekday})`;
+  const pushBtn = !sg.steps.length ? "" : !sg.garmin_linked ? `<span class="muted" style="font-size:12px">Koppel Garmin om hem op je horloge te zetten</span>`
+    : sg.pushed ? `<span class="badge green">✓ Staat op je Garmin</span> <button class="btn" id="unpushBtn">Verwijderen</button>`
+    : `<button class="btn primary" id="pushBtn">${svgI('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>').replace("<svg","<svg width=\"15\" height=\"15\"")}Zet op mijn Garmin</button>`;
+  $("#sugCard").innerHTML = `<div class="sug-head"><div><div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">${when}</div>
+      <div class="sug-title">${esc(sg.title)}</div>${sg.minutes?`<div class="muted">${sg.minutes} min · ±${fmt(sg.est_km,1)} km</div>`:""}</div></div>
+    ${sg.steps.length?`<div class="steps">${sg.steps.map(stepRow).join("")}</div>`:""}
+    <ul class="tiplist">${sg.why.map(w=>`<li class="neutral"><span class="dot">${svgI(TIP_IC.neutral)}</span><span>${esc(w)}</span></li>`).join("")}</ul>
+    ${sg.pushed_other?`<p class="cap" style="margin:10px 0 0">Er staat al een andere dashboardtraining op je Garmin voor deze dag ("${esc(sg.pushed_other)}"); die wordt vervangen.</p>`:""}
+    <div class="row" style="margin-top:14px">${pushBtn}<span class="muted" id="pushMsg" style="font-size:12.5px"></span></div>`;
+  $("#pushBtn") && ($("#pushBtn").onclick = async () => {
+    if (!confirm(`"${sg.title}" op ${sg.weekday} ${sg.date} in je Garmin-agenda zetten? Hij synchroniseert dan naar je horloge.`)) return;
+    $("#pushBtn").disabled = true; $("#pushMsg").textContent = "Bezig…";
+    try { await api("/api/push_workout", {date:sg.date}); await load(); } catch(e){ $("#pushMsg").textContent = e.message; $("#pushBtn").disabled = false; }
+  });
+  $("#unpushBtn") && ($("#unpushBtn").onclick = async () => {
+    if (!confirm("Deze training weer van je Garmin verwijderen?")) return;
+    try { await api("/api/unpush_workout", {date:sg.date}); await load(); } catch(e){ $("#pushMsg").textContent = e.message; }
+  });
+}
+function renderLastSession(){
+  const L = D.overview.last_session;
+  if (!L){ $("#lastCard").innerHTML = `<h3>Laatste training</h3><div class="empty">Nog geen analyse.</div>`; return; }
+  $("#lastCard").innerHTML = `<div class="row between"><div><div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Laatste training · ${dayLabel(L.date)}</div>
+      <h3 style="margin-top:2px">${esc(L.name)}</h3></div></div>
+    <div class="kv" style="margin-top:8px"><div><div class="k">Afstand</div><div class="v tnum">${fmt(L.km,1)} km</div></div><div><div class="k">Tempo</div><div class="v tnum">${L.pace}/km</div></div>
+      <div><div class="k">Hartslag</div><div class="v tnum">${L.avg_hr??"–"}</div></div><div><div class="k">Training Effect</div><div class="v tnum">${L.te!=null?fmt(L.te,1):"–"}</div></div></div>
+    <div style="margin-top:12px">${sessionBlock(L, false)}</div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="lastOpen">Volledige analyse</button></div>`;
+  $("#lastOpen").onclick = () => openRun(L.id);
+}
+function focusHtml(F, compact){
+  if (!F) return `<div class="empty">Nog te weinig techniekdata.</div>`;
+  if (!F.focus.length) return `<div class="empty">Je techniekwaarden zijn overal "goed" of beter. Houd dit vast!</div>`;
+  const unit = f => f.unit==="spm"?" spm":f.unit==="ms"?" ms":f.unit==="cm"?" cm":"%";
+  const res = f => f.result===true ? `<span class="badge green">✓ gelukt</span>` : f.result===false ? `<span class="badge red">✗ niet gelukt</span>` : `<span class="badge">≈ gelijk</span>`;
+  return `<div class="focus">${F.focus.map(f=>`<div class="focus-item">
+      <h4><span>${esc(f.label)}</span><span class="badge orange">${esc(f.rating_name)} · ${fmt(f.median, f.unit==="spm"||f.unit==="ms"?0:1)}${unit(f)}</span></h4>
+      <div class="cue">${esc(f.cue)}</div>
+      ${compact?"":`<div class="drill"><b>Oefening:</b> ${esc(f.drill)}</div>`}
+      <div class="res">Doel: <b>${f.unit==="spm"?"≥":"<"} ${fmt(f.target, f.unit==="spm"||f.unit==="ms"?0:1)}${unit(f)}</b> · Laatste run: <b>${f.last!=null?fmt(f.last, f.unit==="spm"||f.unit==="ms"?0:1)+unit(f):"–"}</b>
+        ${f.last!=null?res(f):""} <span class="muted">${f.delta!=null?`(${f.delta>0?"+":""}${fmt(f.delta,1)} t.o.v. ${f.baseline_similar?"runs in vergelijkbaar tempo":"je 4-weeks mediaan"})`:""}</span></div>
+    </div>`).join("")}</div>`;
+}
+
+// ===================================================================== render
+function render(){
+  Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
+  Chart.defaults.font.family = "Inter, system-ui, sans-serif"; Chart.defaults.font.size = 11.5;
+  const m = D.meta;
+  $("#sub").textContent = `${D.profile?`Profiel ${D.profile} · `:""}${D.athlete||""}${D.mode==="garmin"?" · alleen Garmin":""} · sync ${m.synced_at.slice(8,10)}-${m.synced_at.slice(5,7)} ${m.synced_at.slice(11,16)} · Garmin ${D.garmin_linked ? (m.garmin==="ok"?"gekoppeld":"⚠ "+m.garmin) : "niet gekoppeld"}`;
+  const rel = D.performance.reliability;
+  $("#banner").innerHTML = rel.level === "hoog" ? "" : `<div class="banner ${rel.level}"><span class="badge ${rel.level==="laag"?"orange":"blue"}">Betrouwbaarheid ${rel.level}</span><span class="muted">${rel.weeks} weken met loopdata, ${rel.hard_efforts} (bijna) maximale inspanningen. ${esc(rel.text)}</span></div>`;
+  renderOverview(); renderPerformance(); renderTraining(); renderRecovery(); renderTechnique(); renderZones(); renderActivities();
+  $$(".tiles").forEach(t => t.dataset.n = t.children.length);
+}
+
+// --------------------------------------------------------------------- overzicht
+function renderOverview(){
+  const g = D.goal, O = D.overview, K = O.kpis;
+  if (g && g.need_vdot){
+    const p = g.progress, C = 2*Math.PI*62;
+    const eta = g.ahead ? "Je loopt dit nu al" : g.eta_label ? `Verwacht: ${g.eta_label}` : "Niet binnen 2 jaar bij huidige trend";
+    $("#hero").innerHTML = `<div class="hero-grid">
+      <div class="ring"><svg width="150" height="150"><circle cx="75" cy="75" r="62" stroke="rgba(255,255,255,.22)" stroke-width="12" fill="none"/>
+        <circle cx="75" cy="75" r="62" stroke="#fff" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-p/100)}" style="transition:stroke-dashoffset .8s"/></svg>
+        <div class="c"><div><div class="pct">${p}%</div><div class="pl">naar je doel</div></div></div></div>
+      <div><div class="eyebrow">Jouw doel</div>
+        <div class="goal">${fmt(g.distance_km, g.distance_km%1?1:0)} km in ${esc(g.time)} <small>${g.pace}/km</small></div>
+        <span class="pill">${esc(g.status)}</span> <span class="pill">${eta}</span>
+        <div class="stat-row">
+          <div class="stat"><div class="k">Nu voorspeld</div><div class="v tnum">${g.proj[0].time}</div></div>
+          <div class="stat"><div class="k">${g.ahead?"Voorsprong":"Nog te winnen"}</div><div class="v tnum">${g.gap}</div></div>
+          <div class="stat"><div class="k">VDOT nu → nodig</div><div class="v tnum">${fmt(g.now_vdot,1)} → ${fmt(g.need_vdot,1)}</div></div>
+        </div>
+        <div class="timeline">${[0,4,8,12].map(h=>`<div><div class="k">${h?`over ${h} weken`:"nu"}</div><div class="v tnum">${g.proj[h].time}</div><div class="r">${g.proj[h].lo}–${g.proj[h].hi}</div></div>`).join("")}</div>
+      </div>
+      ${goalForm(g)}</div>`;
+  } else {
+    $("#hero").innerHTML = `<div class="hero-grid"><div></div><div><div class="eyebrow">Jouw doel</div><div class="goal">Stel een doel in</div><p style="opacity:.9;margin:0">Kies een afstand en een doeltijd. Het dashboard laat zien hoe ver je bent en wanneer je het waarschijnlijk haalt.</p></div>${goalForm(g||{})}</div>`;
+  }
+  $("#goalSave").onclick = saveGoal;
+  renderSuggestion(); renderLastSession();
+  $("#focusMini").innerHTML = `<div class="row between"><div><h3>Focus techniek</h3><p class="cap">Waar je het meeste wint, en of het lukte in je laatste run (${esc(D.overview.tech_focus?.last_run?.name||"")})</p></div><button class="btn" id="focusMore">Meer</button></div>${focusHtml(D.overview.tech_focus, true)}`;
+  $("#focusMore").onclick = () => showTab("techniek");
+
+  const v = D.performance.vdot, delta = v && v.ago4!=null ? v.now - v.ago4 : null;
+  const rd = K.readiness;
+  $("#tiles").innerHTML = [
+    tile("VDOT", fmt(K.vdot.value,1), (delta!=null?`<span class="delta ${delta>=0?"up":"down"}">${delta>=0?"▲":"▼"} ${fmt(Math.abs(delta),1)}</span> t.o.v. 4 weken`:"") + (v?.anchored?"<br>o.b.v. beste recente inspanning":""), "--accent", K.vdot.spark),
+    tile("Garmin VO2max", fmt(K.vo2max.value,0), "fysiologisch plafond", "--purple", K.vo2max.spark),
+    tile("Training Readiness", rd.value!=null?fmt(rd.value,0)+"<small>/100</small>":"–", rd.level ? esc(rd.level.toLowerCase()) : (D.garmin_linked?"":"koppel Garmin"), "--green", K.readiness.spark),
+    tile("Km per week", fmt(K.km.value,1), "gemiddelde 4 weken", "--blue", K.km.spark),
+    tile("Fitheid (CTL)", fmt(K.ctl.value,1), "6-weekse belasting", "--teal", K.ctl.spark),
+    tile("HRV", K.hrv.value!=null?fmt(K.hrv.value,0)+"<small>ms</small>":"–", "afgelopen nacht", "--pink", K.hrv.spark),
+  ].join("");
+
+  const cats = ["alle", ...new Set(O.insights.map(i=>i.cat))];
+  $("#insChips").innerHTML = cats.map(c=>`<button class="chip ${c===insCat?"on":""}" data-c="${c}">${c[0].toUpperCase()+c.slice(1)}</button>`).join("");
+  $$("#insChips .chip").forEach(b => b.onclick = () => { insCat = b.dataset.c; renderOverview(); });
+  const prio = {warn:0, good:1, info:2, neutral:3};
+  const all = O.insights.filter(i => insCat==="alle" || i.cat===insCat).sort((a,b)=>(prio[a.tone]??9)-(prio[b.tone]??9));
+  const list = insAll ? all : all.slice(0,4);
+  $("#insights").innerHTML = list.map(i=>`<div class="insight ${i.tone}"><div class="ic">${svgI(INS_IC[i.tone]||INS_IC.neutral)}</div><div><b>${esc(i.title)}</b><p>${esc(i.text)}</p></div></div>`).join("") || `<div class="empty">Geen inzichten in deze categorie.</div>`;
+  if (all.length > 4) { $("#insights").insertAdjacentHTML("beforeend", `<button class="btn" id="insMore" style="justify-self:start">${insAll?"Toon minder":`Toon alle (${all.length})`}</button>`);
+    $("#insMore").onclick = () => { insAll = !insAll; renderOverview(); }; }
+
+  const w = O.this_week, pct = w.avg_km ? Math.min(100, Math.round(w.km / w.avg_km * 100)) : 0;
+  $("#thisWeek").innerHTML = `<h3>Deze week · ${esc(w.label||"")}</h3><p class="cap">${esc(w.range||"")}</p>
+    <div class="kv"><div><div class="k">Kilometers</div><div class="v tnum">${fmt(w.km,1)}</div></div><div><div class="k">Runs</div><div class="v">${w.runs??0}</div></div>
+    <div><div class="k">Tijd</div><div class="v tnum">${hms((w.hours||0)*3600)}</div></div><div><div class="k">Belasting</div><div class="v">${w.load??0}</div></div><div><div class="k">Hoogtemeters</div><div class="v">${w.elev??0}</div></div></div>
+    <p class="cap" style="margin:16px 0 6px">${pct}% van je gemiddelde week (${fmt(w.avg_km,1)} km)</p>
+    <div style="height:10px;border-radius:999px;background:var(--chip);overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px"></div></div>
+    <div style="margin-top:18px">${(() => { const wr = D.activities.filter(r => r.date >= w.week);
+      return wr.length ? wr.map(actRow).join("") : `<div class="empty">Nog geen runs deze week.</div>`; })()}</div>`;
+  bindActs("#thisWeek");
+}
+function goalForm(g){
+  return `<div class="goal-edit"><label>Afstand (km)</label><input id="gKm" inputmode="decimal" value="${g.distance_km??""}" placeholder="bijv. 10">
+    <label>Doeltijd</label><input id="gTime" value="${esc(g.time??"")}" placeholder="bijv. 45:00 of 1:45:00">
+    <button class="btn" id="goalSave">Doel opslaan</button><div class="msg" id="goalMsg"></div></div>`;
+}
+async function saveGoal(){
+  try { await api("/api/goal", {distance_km:$("#gKm").value, time:$("#gTime").value}); await load(); }
+  catch(e){ $("#goalMsg").textContent = e.message; }
+}
+
+// --------------------------------------------------------------------- prestaties
+function renderPerformance(){
+  const P = D.performance, W = P.weeks, proj = P.projection||[];
+  const rows = [...W, ...proj.filter(p=>!W.some(w=>w.week===p.week))];
+  const idx = Object.fromEntries(rows.map((r,i)=>[r.week,i]));
+  const fit = Object.fromEntries((P.trend_fit||[]).map(f=>[f.week,f.fit])), pj = Object.fromEntries(proj.map(x=>[x.week,x]));
+  const vo2 = [...P.vo2max_weeks, ...rows.slice(W.length).map(()=>null)];
+  mk("cVdot", {type:"line", data:{labels:rows.map(r=>r.label), datasets:[
+    {label:"band", data:rows.map(r=>pj[r.week]?.hi??null), borderWidth:0, pointRadius:0, backgroundColor:alpha(css("--accent"),.14), fill:"+1"},
+    {label:"band2", data:rows.map(r=>pj[r.week]?.lo??null), borderWidth:0, pointRadius:0},
+    {label:"Projectie", data:rows.map(r=>pj[r.week]?.v??null), borderColor:css("--accent"), borderDash:[6,5], borderWidth:2.5, pointRadius:0},
+    {label:"Trend", data:rows.map(r=>fit[r.week]??null), borderColor:css("--faint"), borderDash:[2,3], borderWidth:1.5, pointRadius:0},
+    {label:"VDOT", data:rows.map(r=>r.vdot??null), borderColor:css("--blue"), backgroundColor:css("--blue"), borderWidth:2.5, tension:.3, spanGaps:true,
+      pointStyle:rows.map(r=>r.src==="race"?"rectRot":"circle"), pointRadius:rows.map(r=>r.src==="race"?6:4), pointHoverRadius:7},
+    {label:"Garmin VO2max", data:vo2, borderColor:alpha(css("--purple"),.7), borderWidth:1.5, pointRadius:0, spanGaps:true, stepped:true, yAxisID:"y1"},
+  ]}, options:opts({tooltipTitle:weekTip(rows), y:{title:{display:true,text:"VDOT"}}, y1:{title:{display:true,text:"VO2max"}, suggestedMin:40, suggestedMax:60},
+    extra:{plugins:{legend:{position:"top", align:"end", labels:{boxWidth:8, boxHeight:8, usePointStyle:true, padding:14, filter:i=>!i.text.startsWith("band")}},
+      tooltip:{callbacks:{title:weekTip(rows)}, filter:i=>!i.dataset.label.startsWith("band")}}}})});
+  const v = P.vdot;
+  const anc = v && v.anchored && v.best_recent ? `"Nu" = je beste recente inspanning: VDOT ${fmt(v.best_recent.vdot,1)} in ${esc(v.best_recent.name)} (wk ${isoWeek(v.best_recent.date)}), de trendlijn alleen zou ${fmt(v.fit_now,1)} geven. ` : "";
+  $("#predCap").innerHTML = v ? anc + `Trend ${v.slope_month>=0?"+":""}${fmt(v.slope_month,2)} VDOT/maand${v.raw_slope_month>v.slope_month?` (gemeten +${fmt(v.raw_slope_month,2)}, begrensd op ~1/maand)`:""}. Kleine tijden = bandbreedte. Halve/hele marathon incl. duurcorrectie bij weinig omvang.` : "";
+  const cell = x => `<b>${x.time}</b><span class="r">${x.lo}–${x.hi}</span>`;
+  $("#predTable").innerHTML = `<thead><tr><th>Afstand</th><th>Nu</th><th>+4 wk</th><th>+8 wk</th><th>+12 wk</th><th>Garmin</th></tr></thead><tbody>` +
+    (P.predictions||[]).map(x=>`<tr><td><b>${x.label}</b>${x.penalty?`<span class="r">+${x.penalty}% duurcorrectie</span>`:""}</td><td>${cell(x.h0)}</td><td>${cell(x.h4)}</td><td>${cell(x.h8)}</td><td>${cell(x.h12)}</td><td>${x.garmin?`<b>${x.garmin}</b><span class="r">racevoorspeller</span>`:'<span class="muted">–</span>'}</td></tr>`).join("") + "</tbody>";
+  $("#best").innerHTML = `<thead><tr><th>Afstand</th><th>Tijd</th><th>Tempo</th><th>VDOT</th><th>Wanneer</th></tr></thead><tbody>` +
+    (P.best_efforts.map(b=>`<tr style="cursor:pointer" data-id="${b.id}"><td>${b.label}</td><td><b>${b.time}</b></td><td>${b.pace}/km</td><td>${fmt(b.vdot,1)} ${b.hard?"":'<span class="badge">submax</span>'}</td><td>wk ${isoWeek(b.date)}<span class="r">${esc(b.name)}</span></td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nog geen data.</td></tr>`) + "</tbody>";
+  $$("#best tr[data-id]").forEach(tr => tr.onclick = () => openRun(tr.dataset.id));
+  const G = P.garmin;
+  if (!D.garmin_linked) { $("#garminPhys").innerHTML = needGarmin("Lactaatdrempel, Endurance en Hill Score"); return; }
+  const items = [["Lactaatdrempel HR", G.lt_hr?`${G.lt_hr}<small class="muted"> bpm</small>`:null], ["Lactaatdrempel tempo", G.lt_pace?G.lt_pace+"/km":null],
+    ["Endurance Score", G.endurance], ["Hill Score", G.hill], ["Hill kracht / duur", G.hill_strength!=null?`${G.hill_strength} / ${G.hill_endurance}`:null]].filter(x=>x[1]!=null);
+  $("#garminPhys").innerHTML = (items.length ? `<div class="kv">${items.map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")}</div>` : `<div class="empty">Nog geen data van Garmin.</div>`)
+    + (G.endurance==null && G.hill==null ? `<p class="cap" style="margin:12px 0 0">Endurance Score en Hill Score worden niet berekend door je horloge (alleen o.a. Forerunner 965 en Fenix).</p>` : "")
+    + (G.endurance_hist?.length>1?'<div class="chart sm" style="margin-top:14px;height:160px"><canvas id="cEnd"></canvas></div>':"");
+  if (G.endurance_hist?.length>1) mk("cEnd", {type:"line", data:{labels:G.endurance_hist.map(e=>`wk ${isoWeek(e.week)}`), datasets:[{label:"Endurance Score", data:G.endurance_hist.map(e=>e.score), borderColor:css("--teal"), backgroundColor:alpha(css("--teal"),.12), fill:true, tension:.35, pointRadius:0}]}, options:opts({legend:false})});
+}
+
+// --------------------------------------------------------------------- training
+function renderTraining(){
+  const T = D.training, W = T.weeks, st = T.status, last = W[W.length-1]||{};
+  $("#trTiles").innerHTML = [
+    tile("Trainingsstatus", st.training_status ? esc(prettify(st.training_status)) : "–", D.garmin_linked?(st.load_focus?esc(prettify(st.load_focus)):""):"koppel Garmin", "--accent"),
+    tile("Acuut / chronisch", st.acwr ? fmt(st.acwr,2) : "–", "Garmin, 0,8–1,5 is gezond", "--orange"),
+    tile("Km deze week", fmt(last.km,1), `${last.runs||0} runs · ${last.elev||0} hm`, "--blue", W.map(w=>w.km)),
+    tile(`Rustig (${D.zones.easy_label})`, last.z_low!=null?last.z_low+"%":"–", "van je looptijd deze week", "--green", W.map(w=>w.z_low)),
+  ].join("");
+  mk("cVol", {data:{labels:W.map(w=>w.label), datasets:[
+    {type:"bar", label:"Km", data:W.map(w=>w.km), backgroundColor:alpha(css("--accent"),.85), borderRadius:6, maxBarThickness:34, order:2},
+    {type:"line", label:"Langste run", data:W.map(w=>w.longest||null), borderColor:css("--blue"), pointRadius:3, tension:.3, order:1},
+    {type:"line", label:"Hoogtemeters", data:W.map(w=>w.elev), borderColor:css("--teal"), borderDash:[4,3], pointRadius:0, yAxisID:"y1", order:0},
+  ]}, options:opts({tooltipTitle:weekTip(W), y:{title:{display:true,text:"km"}}, y1:{title:{display:true,text:"m"}}})});
+  const L = T.load, ld = L.map(x=>x.date);
+  mk("cLoad", {data:{labels:ld, datasets:[
+    {type:"bar", label:"Vorm (TSB)", data:L.map(x=>x.tsb), backgroundColor:L.map(x=>x.tsb<0?alpha(css("--orange"),.45):alpha(css("--green"),.45)), borderRadius:2},
+    {type:"line", label:"Fitheid (CTL)", data:L.map(x=>x.ctl), borderColor:css("--blue"), borderWidth:2.5, pointRadius:0, tension:.35},
+    {type:"line", label:"Vermoeidheid (ATL)", data:L.map(x=>x.atl), borderColor:css("--purple"), borderWidth:1.5, pointRadius:0, tension:.35},
+  ]}, options:opts({tooltipTitle:dayTip(ld), x:dayTicks(ld)})});
+  const zk = zoneMode==="hr" ? "z7" : "pz7", ZW = W.filter(w=>w[zk]), nz = ZW.length ? ZW[0][zk].length : 7;
+  const nEasy = zoneMode==="hr" && nz===5 && D.zones.hr_active==="garmin" ? 3 : 2;
+  mk("cZones", {type:"bar", data:{labels:ZW.map(w=>w.label), datasets:[...Array(nz).keys()].map(i=>({
+    label:`Z${i+1}`, data:ZW.map(w=>w[zk][i]), backgroundColor:alpha(css(ZCOL[i]),.85), borderWidth:0}))},
+    options:opts({tooltipTitle:weekTip(ZW), x:{stacked:true}, y:{stacked:true, max:100, ticks:{callback:v=>v+"%"}},
+      extra:{plugins:{legend:{position:"top", align:"end", labels:{boxWidth:8, boxHeight:8, usePointStyle:true, padding:10}},
+        tooltip:{callbacks:{title:weekTip(ZW), label:c=>`${c.dataset.label}: ${c.raw}%`, footer:it=>{ const w = ZW[it[0].dataIndex][zk]; return `Rustig (Z1–Z${nEasy}): ${w.slice(0,nEasy).reduce((a,b)=>a+(b||0),0)}%`; }}}}}})});
+  $("#zonesCap").textContent = zoneMode==="hr" ? `Hartslagzones (${D.zones.hr_active==="model"?"model":"Garmin"}, Z1–Z${nz}). Doel: ~80% rustig (${D.zones.easy_label}, onder ~${(D.zones.hr_zones_by?.[D.zones.hr_active]||D.zones.hr_zones)[nEasy]?.from ?? "–"} bpm)`
+    : `Tempozones met de model-drempel (${D.zones.sources.model||"–"}/km), Z1–Z${nz}. Doel: ~80% in Z1–Z2`;
+  $$("#zoneSeg button").forEach(b => { b.classList.toggle("on", b.dataset.z===zoneMode); b.onclick = () => { zoneMode = b.dataset.z; renderTraining(); }; });
+  if (T.te_runs.length){
+    if (!$("#cTe")) $("#teWrap").innerHTML = '<canvas id="cTe"></canvas>';
+    mk("cTe", {type:"scatter", data:{datasets:[{label:"Runs", data:T.te_runs.map(r=>({x:r.a, y:r.an, n:r.name, d:r.date, l:r.label})),
+      backgroundColor:alpha(css("--accent"),.7), pointRadius:7, pointHoverRadius:9}]},
+      options:opts({legend:false, x:{min:0, max:5, title:{display:true,text:"Aeroob TE"}, grid:{color:css("--line")}}, y:{min:0, max:5, title:{display:true,text:"Anaeroob TE"}},
+        extra:{interaction:{mode:"nearest", intersect:true}, plugins:{legend:{display:false}, tooltip:{callbacks:{title:i=>dayLabel(i[0].raw.d), label:i=>`${i.raw.n}: ${i.raw.x} / ${i.raw.y} ${i.raw.l?"· "+prettify(i.raw.l):""}`}}}}})});
+  } else { charts.cTe?.destroy(); delete charts.cTe; $("#teWrap").innerHTML = D.garmin_linked ? `<div class="empty">Nog geen Training Effect in deze periode.</div>` : needGarmin("Training Effect"); }
+  mk("cRpe", {type:"scatter", data:{datasets:[{label:"Runs", data:T.rpe_runs.map(r=>({x:r.load, y:r.rpe, n:r.name, d:r.date})), backgroundColor:alpha(css("--blue"),.65), pointRadius:6}]},
+    options:opts({legend:false, x:{title:{display:true,text:"Belasting"}, grid:{color:css("--line")}}, y:{min:0, max:10, title:{display:true,text:"RPE"}},
+      extra:{interaction:{mode:"nearest", intersect:true}, plugins:{legend:{display:false}, tooltip:{callbacks:{title:i=>dayLabel(i[0].raw.d), label:i=>`${i.raw.n}: RPE ${i.raw.y}, belasting ${i.raw.x}`}}}}})});
+  renderScenario();
+}
+function renderScenario(){
+  const S = D.training.scenario;
+  if (!$("#km").dataset.init){ $("#km").value = S.km_per_week; $("#km").dataset.init = 1; }
+  $("#kmVal").textContent = `${$("#km").value} km/week`;
+  $("#scBasis").textContent = `CTL ${fmt(S.ctl_now,1)} → ${fmt(S.ctl[S.ctl.length-1],1)}`;
+  mk("cScen", {type:"line", data:{labels:S.ctl_weeks.map(c=>c.label), datasets:[{label:"Fitheid (CTL)", data:S.ctl_weeks.map(c=>c.ctl), borderColor:css("--teal"), backgroundColor:alpha(css("--teal"),.14), fill:true, tension:.35, pointRadius:0}]}, options:opts({legend:false})});
+  const g = D.goal;
+  $("#scTimes").innerHTML = (g && S.goal_time ? `<div style="background:color-mix(in srgb,var(--accent) 12%,var(--bg2))"><div class="muted" style="font-size:12px">Jouw doel (${fmt(g.distance_km, g.distance_km%1?1:0)} km)</div><div class="v tnum">${S.goal_time}</div></div>` : "") +
+    Object.entries(S.times||{}).map(([k,t])=>`<div><div class="muted" style="font-size:12px">${D.labels[k]}</div><div class="v tnum">${t}</div></div>`).join("");
+  $("#scNote").textContent = S.basis==="model" ? "Over 12 weken, via jouw persoonlijke verband tussen fitheid en prestatie."
+    : `Over 12 weken, op basis van je trend. De omvang (en een lange duurloop van ±${S.long_est} km) telt mee in de duurcorrectie voor langere afstanden. Het effect van meer km op je VDOT zelf is nog niet uit je data te meten (nu ${S.n_pairs} weken, te weinig variatie in belasting).`;
+}
+
+// --------------------------------------------------------------------- herstel
+function renderRecovery(){
+  const R = D.recovery, t = R.today, a = R.averages, d = R.days, dd = d.map(x=>x.date);
+  const vs = (v, avg, unit="", inv=false, dec=0) => v==null ? "" : avg==null ? "" : (() => { const df = v-avg; const good = inv ? df<=0 : df>=0; return `<span class="delta ${good?"up":"down"}">${df>=0?"+":""}${fmt(df,dec)}${unit}</span> t.o.v. 28 d`; })();
+  $("#recTiles").innerHTML = [
+    tile("Training Readiness", t.readiness!=null?fmt(t.readiness,0)+"<small>/100</small>":"–", t.readiness_level?esc(prettify(t.readiness_level)):(D.garmin_linked?"":"koppel Garmin"), "--green", d.map(x=>x.readiness)),
+    tile("HRV", t.hrv!=null?fmt(t.hrv,0)+"<small>ms</small>":"–", t.hrv_status?esc(prettify(t.hrv_status)):vs(t.hrv, a.hrv, " ms"), "--pink", d.map(x=>x.hrv)),
+    tile("Rusthartslag", t.rhr!=null?fmt(t.rhr,0)+"<small>bpm</small>":"–", vs(t.rhr, a.rhr, "", true), "--red", d.map(x=>x.rhr)),
+    tile("Slaap", t.sleep_h!=null?hms(t.sleep_h*3600).slice(0,-3)+"<small>u</small>":"–", t.sleep_score!=null?`score ${fmt(t.sleep_score,0)}`:"", "--purple", d.map(x=>x.sleep_h)),
+    tile("Body Battery", t.bb_high!=null?fmt(t.bb_high,0):"–", t.bb_wake!=null?`bij wakker worden ${t.bb_wake}`:(D.garmin_linked?"":"koppel Garmin"), "--blue", d.map(x=>x.bb_high)),
+    tile("Stress", t.stress_avg!=null?fmt(t.stress_avg,0):"–", t.stress_avg!=null?"gemiddeld (0–100)":(D.garmin_linked?"":"koppel Garmin"), "--orange", d.map(x=>x.stress_avg)),
+  ].join("");
+  mk("cHrv", {type:"line", data:{labels:dd, datasets:[
+    {label:"bandHi", data:d.map(x=>x.hrv_base_hi??null), borderWidth:0, pointRadius:0, backgroundColor:alpha(css("--green"),.12), fill:"+1", spanGaps:true},
+    {label:"bandLo", data:d.map(x=>x.hrv_base_lo??null), borderWidth:0, pointRadius:0, spanGaps:true},
+    {label:"HRV (ms)", data:d.map(x=>x.hrv), borderColor:css("--pink"), backgroundColor:css("--pink"), borderWidth:2, pointRadius:2, tension:.3, spanGaps:true},
+  ]}, options:opts({tooltipTitle:dayTip(dd), x:dayTicks(dd), extra:{plugins:{legend:{display:false}, tooltip:{filter:i=>!i.dataset.label.startsWith("band"), callbacks:{title:dayTip(dd)}}}}})});
+  const hasStages = d.some(x=>x.sleep_deep_h!=null);
+  mk("cSleep", {data:{labels:dd, datasets: hasStages ? [
+    {type:"bar", label:"Diep", data:d.map(x=>x.sleep_deep_h), backgroundColor:alpha(css("--purple"),.95), stack:"s"},
+    {type:"bar", label:"REM", data:d.map(x=>x.sleep_rem_h), backgroundColor:alpha(css("--blue"),.8), stack:"s"},
+    {type:"bar", label:"Licht", data:d.map(x=>x.sleep_light_h), backgroundColor:alpha(css("--blue"),.35), stack:"s"},
+    {type:"line", label:"Score", data:d.map(x=>x.sleep_score), borderColor:css("--accent"), pointRadius:0, tension:.3, yAxisID:"y1", spanGaps:true},
+  ] : [
+    {type:"bar", label:"Slaap (u)", data:d.map(x=>x.sleep_h), backgroundColor:alpha(css("--purple"),.75), borderRadius:3},
+    {type:"line", label:"Score", data:d.map(x=>x.sleep_score), borderColor:css("--accent"), pointRadius:0, tension:.3, yAxisID:"y1", spanGaps:true},
+  ]}, options:opts({tooltipTitle:dayTip(dd), x:{...dayTicks(dd), stacked:true}, y:{stacked:true, title:{display:true,text:"uur"}}, y1:{min:0, max:100}})});
+  if (d.some(x=>x.bb_high!=null || x.stress_avg!=null)){
+    if (!$("#cBb")) $("#bbWrap").innerHTML = '<canvas id="cBb"></canvas>';
+    mk("cBb", {data:{labels:dd, datasets:[
+      {type:"line", label:"BB hoog", data:d.map(x=>x.bb_high), borderColor:css("--blue"), backgroundColor:alpha(css("--blue"),.15), fill:"+1", pointRadius:0, tension:.3, spanGaps:true},
+      {type:"line", label:"BB laag", data:d.map(x=>x.bb_low), borderColor:alpha(css("--blue"),.5), pointRadius:0, tension:.3, spanGaps:true},
+      {type:"bar", label:"Stress", data:d.map(x=>x.stress_avg), backgroundColor:alpha(css("--orange"),.55), borderRadius:2, yAxisID:"y1"},
+    ]}, options:opts({tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{min:0, max:100}, y1:{min:0, max:100}})});
+  } else { charts.cBb?.destroy(); delete charts.cBb; $("#bbWrap").innerHTML = needGarmin("Body Battery en stress"); }
+  mk("cRhr", {data:{labels:dd, datasets:[
+    {type:"line", label:"Rusthartslag", data:d.map(x=>x.rhr), borderColor:css("--red"), pointRadius:0, tension:.3, spanGaps:true},
+    {type:"bar", label:"Readiness", data:d.map(x=>x.readiness), backgroundColor:alpha(css("--green"),.5), borderRadius:2, yAxisID:"y1"},
+  ]}, options:opts({tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{title:{display:true,text:"bpm"}}, y1:{min:0, max:100}})});
+  const H = R.hrr_runs;
+  mk("cHrr", {type:"line", data:{labels:H.map(h=>`wk ${isoWeek(h.date)}`), datasets:[{label:"Hartslagdaling 60 s", data:H.map(h=>h.hrr), borderColor:css("--green"), backgroundColor:alpha(css("--green"),.12), fill:true, tension:.3, pointRadius:4}]},
+    options:opts({legend:false, tooltipTitle:i=>dayLabel(H[i[0].dataIndex].date), y:{title:{display:true,text:"slagen"}}})});
+}
+
+// --------------------------------------------------------------------- techniek
+// Garmin-categorieën (percentielen van alle Garmin-lopers): paars >95%, blauw 70-95%, groen 30-70%, oranje 5-30%, rood <5%
+const RATING = [["Uitstekend","--purple","top 5%"],["Goed","--blue","70–95%"],["Gemiddeld","--green","30–70%"],["Onder gemiddeld","--orange","5–30%"],["Laag","--red","onderste 5%"]];
+const TECH_REF = {
+  cadence:{label:"Cadans", unit:"spm", dec:0, higher:true, edges:[185,174,163,151], tip:"Hogere cadans = kortere, lichtere passen en minder remmende landing. Stijgt vanzelf bij hoger tempo."},
+  gct:{label:"Grondcontacttijd", unit:"ms", dec:0, higher:false, edges:[218,249,278,309], tip:"Korter = meer veerkracht. Daalt bij hoger tempo; kracht- en sprongtraining helpen."},
+  vo:{label:"Verticale oscillatie", unit:"cm", dec:1, higher:false, edges:[6.4,8.2,9.8,11.6], tip:"Hoeveel je op en neer gaat per pas. Minder = minder energie verloren omhoog."},
+  vr:{label:"Verticale ratio", unit:"%", dec:1, higher:false, edges:[6.1,7.5,8.7,10.1], tip:"Oscillatie gedeeld door paslengte: de beste maat voor zuinig lopen, minder afhankelijk van tempo."},
+};
+function rate(key, v){
+  if (v==null) return null; const r = TECH_REF[key], e = r.edges;
+  const i = r.higher ? (v>e[0]?0:v>=e[1]?1:v>=e[2]?2:v>=e[3]?3:4) : (v<e[0]?0:v<e[1]?1:v<e[2]?2:v<e[3]?3:4);
+  return {i, name:RATING[i][0], col:RATING[i][1]};
+}
+function refBands(key){
+  const e = TECH_REF[key].edges, lims = TECH_REF[key].higher ? [999,...e,0] : [0,...e,999];
+  return {axis:"y", list:RATING.map((r,i)=>[lims[i], lims[i+1], alpha(css(r[1]),.08)])};
+}
+const rateBadge = (key, v) => { const r = rate(key, v); return r ? `<span class="badge" style="color:${css(r.col)};background:${alpha(css(r.col),.14)}">${r.name}</span>` : ""; };
+function renderTechnique(){
+  const T = D.technique, W = T.weeks, L = T.latest;
+  $("#focusCard").innerHTML = `<h3>Focuspunten</h3><p class="cap">De 1–2 punten met de meeste winst (Garmin-categorieën, mediaan laatste 4 weken). "Gelukt" vergelijkt je laatste run met runs in een vergelijkbaar tempo, omdat techniek met tempo verandert.</p>${focusHtml(T.focus, false)}`;
+  const vo = L.vert_osc!=null ? L.vert_osc/10 : null;
+  $("#techTiles").innerHTML = [
+    tile("Cadans", fmt(L.cadence,0)+"<small>spm</small>", rateBadge("cadence", L.cadence)+" goed: ≥ 174", "--teal", W.map(w=>w.cadence)),
+    tile("Grondcontact", L.gct!=null?fmt(L.gct,0)+"<small>ms</small>":"–", rateBadge("gct", L.gct)+" goed: < 249", "--orange", W.map(w=>w.gct)),
+    tile("Verticale oscillatie", vo!=null?fmt(vo,1)+"<small>cm</small>":"–", rateBadge("vo", vo)+" goed: < 8,2", "--blue", W.map(w=>w.vert_osc)),
+    tile("Verticale ratio", L.vert_ratio!=null?fmt(L.vert_ratio,1)+"<small>%</small>":"–", rateBadge("vr", L.vert_ratio)+" goed: < 7,5", "--pink", W.map(w=>w.vert_ratio)),
+    tile("Paslengte", L.stride!=null?fmt(L.stride,2)+"<small>m</small>":"–", "geen vaste norm", "--purple", W.map(w=>w.stride)),
+    tile("Loopvermogen", L.power!=null?fmt(L.power,0)+"<small>W</small>":"–", L.eff_power?`${fmt(L.eff_power,2)} m/min per W`:"", "--accent", W.map(w=>w.power)),
+  ].join("");
+  const cur = {cadence:L.cadence, gct:L.gct, vo:vo, vr:L.vert_ratio};
+  $("#techRef").innerHTML = `<thead><tr><th>Meting</th><th>Jij</th>${RATING.map(r=>`<th><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${css(r[1])};margin-right:5px"></span>${r[0]}<span class="r" style="text-transform:none;letter-spacing:0">${r[2]}</span></th>`).join("")}</tr></thead><tbody>` +
+    Object.entries(TECH_REF).map(([k,r])=>{
+      const e = r.edges, f = v => fmt(v, r.dec), ri = rate(k, cur[k])?.i;
+      const cells = r.higher ? [`> ${f(e[0])}`, `${f(e[1])}–${f(e[0])}`, `${f(e[2])}–${f(e[1])}`, `${f(e[3])}–${f(e[2])}`, `< ${f(e[3])}`]
+                             : [`< ${f(e[0])}`, `${f(e[0])}–${f(e[1])}`, `${f(e[1])}–${f(e[2])}`, `${f(e[2])}–${f(e[3])}`, `> ${f(e[3])}`];
+      return `<tr><td><b>${r.label}</b><span class="r" style="white-space:normal;max-width:260px">${esc(r.tip)}</span></td><td><b class="tnum">${cur[k]!=null?f(cur[k]):"–"}</b> <span class="r">${r.unit}</span></td>` +
+        cells.map((c,i)=>`<td class="tnum" style="${i===ri?`background:${alpha(css(RATING[i][1]),.16)};font-weight:700;border-radius:8px`:"color:var(--muted)"}">${c}</td>`).join("") + "</tr>";
+    }).join("") + "</tbody>";
+  const tt = weekTip(W);
+  mk("cCad", {type:"line", data:{labels:W.map(w=>w.label), datasets:[
+    {label:"Cadans (spm)", data:W.map(w=>w.cadence), borderColor:css("--teal"), pointRadius:3, tension:.3, spanGaps:true},
+    {label:"Paslengte (m)", data:W.map(w=>w.stride), borderColor:css("--purple"), pointRadius:3, tension:.3, spanGaps:true, yAxisID:"y1"},
+  ]}, options:opts({tooltipTitle:tt, y:{title:{display:true,text:"spm"}}, y1:{title:{display:true,text:"m"}}, bands:refBands("cadence")})});
+  mk("cVo", {type:"line", data:{labels:W.map(w=>w.label), datasets:[
+    {label:"Verticale oscillatie (cm)", data:W.map(w=>w.vert_osc!=null?+(w.vert_osc/10).toFixed(1):null), borderColor:css("--blue"), pointRadius:3, tension:.3, spanGaps:true},
+    {label:"Verticale ratio (%)", data:W.map(w=>w.vert_ratio), borderColor:css("--pink"), pointRadius:3, tension:.3, spanGaps:true, yAxisID:"y1"},
+  ]}, options:opts({tooltipTitle:tt, y:{title:{display:true,text:"cm"}}, y1:{title:{display:true,text:"%"}}, bands:refBands("vo")})});
+  mk("cGct", {data:{labels:W.map(w=>w.label), datasets:[
+    {type:"bar", label:"Grondcontact (ms)", data:W.map(w=>w.gct), backgroundColor:alpha(css("--orange"),.7), borderRadius:6, maxBarThickness:30},
+    {type:"line", label:"Grondcontact (%)", data:W.map(w=>w.gct_pct), borderColor:css("--red"), pointRadius:3, tension:.3, spanGaps:true, yAxisID:"y1"},
+  ]}, options:opts({tooltipTitle:tt, y:{title:{display:true,text:"ms"}, suggestedMin:200}, y1:{title:{display:true,text:"%"}}, bands:refBands("gct")})});
+  mk("cPow", {data:{labels:W.map(w=>w.label), datasets:[
+    {type:"bar", label:"Vermogen (W)", data:W.map(w=>w.power), backgroundColor:alpha(css("--accent"),.7), borderRadius:6, maxBarThickness:30},
+    {type:"line", label:"Efficiëntie (m/min per W)", data:W.map(w=>w.eff_power), borderColor:css("--green"), pointRadius:3, tension:.3, spanGaps:true, yAxisID:"y1"},
+  ]}, options:opts({tooltipTitle:tt, y:{title:{display:true,text:"W"}, suggestedMin:250}, y1:{title:{display:true,text:"m/min/W"}}})});
+  $("#hrRef").textContent = T.hr_ref;
+  mk("cPace", {data:{labels:W.map(w=>w.label), datasets:[
+    {type:"line", label:`Tempo bij HR ${T.hr_ref}`, data:T.pace_ref.map(p=>p.pace), borderColor:css("--green"), backgroundColor:css("--green"), borderWidth:2.5, pointRadius:4, tension:.3, spanGaps:true},
+    {type:"bar", label:"Ontkoppeling %", data:W.map(w=>w.decoupling), backgroundColor:alpha(css("--orange"),.45), borderRadius:4, yAxisID:"y1", maxBarThickness:28},
+  ]}, options:opts({tooltipTitle:tt, y:{reverse:true, ticks:{callback:v=>mmss(v)}, title:{display:true,text:"min/km"}}, y1:{title:{display:true,text:"%"}, min:0},
+    extra:{plugins:{tooltip:{callbacks:{title:tt, label:c=>c.dataset.yAxisID==="y1"?`Ontkoppeling: ${c.raw}%`:`Tempo: ${mmss(c.raw)}/km`}}}}})});
+}
+
+// --------------------------------------------------------------------- zones
+let pzSrc = "garmin";
+const ZCOL = ["--faint","--blue","--green","--orange","--red","--pink","--purple"];
+function renderZones(){
+  const Z = D.zones, S = Z.sources, ss = Z.sources_s;
+  $("#zTiles").innerHTML = [
+    tile("Garmin lactaatdrempel", S.garmin?S.garmin+"<small>/km</small>":"–", Z.garmin_lt_hr?`bij ${Z.garmin_lt_hr} bpm · automatisch bijgewerkt`:(D.garmin_linked?"":"koppel Garmin"), "--purple", Z.history.map(h=>h.garmin)),
+    tile("Model (VDOT)", S.model?S.model+"<small>/km</small>":"–", Z.vdot_now?`VDOT ${fmt(Z.vdot_now,1)} · elke week bijgewerkt`:"", "--accent", Z.history.map(h=>h.model)),
+  ].join("");
+  const diff = ss.model && ss.garmin ? ss.model - ss.garmin : null;
+  $("#zNote").innerHTML = diff!=null && Math.abs(diff) >= 10 ? `<div class="banner laag"><span class="badge orange">Let op</span><span class="muted">
+    Garmin schat je drempeltempo op ${S.garmin}/km, ${Math.abs(diff)} s/km ${diff>0?"sneller":"langzamer"} dan wat je (bijna) maximale inspanningen laten zien (${S.model}/km).
+    Met de Garmin-drempel lijken je runs ${diff>0?"rustiger":"zwaarder"} dan met het model. Een 5 km- of 10 km-wedstrijd op volle kracht geeft uitsluitsel. Tot die tijd is je hartslag de betrouwbaarste maat voor intensiteit.</span></div>` : "";
+  const GW = Z.garmin_watch;
+  $("#watchZones").innerHTML = !GW || !D.garmin_linked ? "" : `<div class="banner ${GW.in_sync?"":"laag"}">
+    <span class="badge ${GW.in_sync?"green":"orange"}">${GW.in_sync?"Horloge = model":"Horloge wijkt af"}</span>
+    <span class="muted">Zones op je horloge: ${GW.watch.slice(1).map((f,i)=>`Z${i+2} ≥ ${f}`).join(", ")}. Model: ${GW.model.slice(1).map((f,i)=>`Z${i+2} ≥ ${f}`).join(", ")}.</span>
+    ${GW.in_sync?"":`<button class="btn primary" id="zonesToWatch">Zet model-zones op mijn Garmin</button>`}
+    ${GW.backup?`<button class="btn" id="zonesRestore">Herstel originele Garmin-zones</button>`:""}<span class="muted" id="zonesMsg"></span></div>`;
+  $("#zonesToWatch") && ($("#zonesToWatch").onclick = async () => {
+    if (!confirm("De hartslagzones voor hardlopen in je Garmin-account vervangen door de model-zones? Je originele zones worden eerst bewaard, zodat je ze kunt terugzetten.")) return;
+    $("#zonesMsg").textContent = "Bezig…";
+    try { await api("/api/garmin_zones", {}); await load(); } catch(e){ $("#zonesMsg").textContent = e.message; }
+  });
+  $("#zonesRestore") && ($("#zonesRestore").onclick = async () => {
+    if (!confirm("Je originele Garmin-hartslagzones voor hardlopen terugzetten?")) return;
+    $("#zonesMsg").textContent = "Bezig…";
+    try { await api("/api/garmin_zones", {restore:true}); await load(); } catch(e){ $("#zonesMsg").textContent = e.message; }
+  });
+  const H = Z.history;
+  mk("cThr", {type:"line", data:{labels:H.map(h=>h.label), datasets:[
+    {label:"Garmin", data:H.map(h=>h.garmin), borderColor:css("--purple"), backgroundColor:css("--purple"), pointRadius:4, tension:.3, spanGaps:true},
+    {label:"Model", data:H.map(h=>h.model), borderColor:css("--accent"), backgroundColor:css("--accent"), borderWidth:2.5, pointRadius:3, tension:.3, spanGaps:true},
+  ]}, options:opts({tooltipTitle:weekTip(H), y:{reverse:true, ticks:{callback:v=>mmss(v)}, title:{display:true,text:"min/km"}},
+    extra:{plugins:{tooltip:{callbacks:{title:weekTip(H), label:c=>`${c.dataset.label}: ${mmss(c.raw)}/km`}}}}})});
+  const dn = Z.daniels_now, d12 = Z.daniels_12;
+  $("#dCap").textContent = dn ? `Uit je VDOT: nu ${fmt(Z.vdot_now,1)}, verwacht over 12 weken ${fmt(Z.vdot_12,1)}. Deze tempo's worden elke week automatisch bijgewerkt.` : "";
+  const rng = x => x.to ? `${x.from}–${x.to}` : x.from;
+  $("#dTable").innerHTML = dn ? `<thead><tr><th>Type</th><th>Nu</th><th>Over 12 wk</th><th>Waarvoor</th></tr></thead><tbody>` +
+    Object.keys(dn).map(k=>`<tr><td><b>${k}</b><span class="r">${esc(dn[k].name)}</span></td><td><b class="tnum">${rng(dn[k])}</b><span class="r">/km</span></td><td class="tnum">${rng(d12[k])}<span class="r">/km</span></td><td style="white-space:normal;color:var(--muted);font-size:12.5px">${esc(dn[k].doel)}</td></tr>`).join("") + "</tbody>" : "";
+  $$("#pzSeg button").forEach(b => { b.classList.toggle("on", b.dataset.s===pzSrc); b.onclick = () => { pzSrc = b.dataset.s; renderZones(); }; });
+  const rows = Z.pace_zones[pzSrc] || [];
+  $("#pzCap").textContent = `Op basis van drempeltempo ${S[pzSrc]||"–"}/km (${{garmin:"Garmin lactaatdrempel",model:"jouw VDOT"}[pzSrc]}). Zonegrenzen als % van je drempelsnelheid.`;
+  const tp = Z.time_pace?.[pzSrc], th = Z.time_hr, tcell = t => t ? `<td class="tnum"><b>${t.pct}%</b><span class="r">${Math.floor(t.min/60)}:${String(t.min%60).padStart(2,"0")} u</span></td>` : `<td class="muted">–</td>`;
+  $("#pzTable").innerHTML = rows.length ? `<thead><tr><th>Zone</th><th>Tempo</th><th>% drempel</th><th>Jouw tijd</th></tr></thead><tbody>` + rows.map((r,i)=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${css(ZCOL[i]||"--faint")};margin-right:8px"></span><b>Z${i+1}</b><span class="r" style="margin-left:18px">${esc(r.name)}</span></td>
+    <td class="tnum"><b>${r.slow&&r.fast?`${r.slow} – ${r.fast}`:r.fast?`langzamer dan ${r.fast}`:`sneller dan ${r.slow}`}</b><span class="r">/km</span></td><td class="tnum muted">${r.hi_pct?`${fmt(r.lo_pct,r.lo_pct%1?1:0)}–${fmt(r.hi_pct,r.hi_pct%1?1:0)}%`:`> ${fmt(r.lo_pct,r.lo_pct%1?1:0)}%`}</td>${tcell(tp?.[i])}</tr>`).join("") + "</tbody>" : `<tr><td class="muted">Geen data voor deze bron.</td></tr>`;
+  $("#pzCap").textContent += ` Jouw tijd = aandeel van je looptijd in de gekozen periode, berekend uit het tempo per seconde met deze drempel (stilstaan telt niet mee).`;
+  const hzSrc = Z.hr_active, hzRows = Z.hr_zones_by?.[hzSrc] || Z.hr_zones;
+  $$("#hzSeg button").forEach(b => { b.classList.toggle("on", b.dataset.s===hzSrc); b.disabled = !Z.hr_zones_by?.[b.dataset.s];
+    b.onclick = async () => { if (b.dataset.s===hzSrc) return; await api("/api/settings", {hr_zones:b.dataset.s}); await load(); }; });
+  $("#hzCap").textContent = hzSrc==="model"
+    ? `Berekend uit je VDOT (${fmt(Z.vdot_now,1)}): Daniels-intensiteiten omgezet naar hartslag via je hartslagreserve (rust ${Z.rest_hr}, max ${Z.max_hr} uit Garmin). Schuift mee met je conditie. Deze zones gebruikt het hele dashboard.`
+    : Z.hr_source==="garmin"
+    ? `Uit Garmin Connect (methode: ${Z.hr_method==="HR_MAX"?"% van max hartslag":Z.hr_method==="LACTATE_THRESHOLD"?"% van drempelhartslag":Z.hr_method==="HRR"?"% van hartslagreserve":Z.hr_method}): max ${Z.max_hr}, rust ${Z.rest_hr}, drempel ${Z.lthr??"–"}. Jouw tijd berekend uit je hartslag per seconde.`
+    : `Max ${Z.max_hr??"–"}, drempel ${Z.lthr??"–"} (Garmin-zones nog niet opgehaald: klik Synchroniseren).`;
+  if (hzSrc==="garmin") $("#hzCap").textContent += " Deze zones gebruikt het hele dashboard.";
+  const mx = Z.max_hr || 200, mn = 100;
+  $("#hzTable").innerHTML = `<thead><tr><th>Zone</th><th>Hartslag</th><th style="width:34%"></th><th>Jouw tijd</th></tr></thead><tbody>` + hzRows.map((z,i)=>{
+    const lo = Math.max(z.from ?? mn, mn), l = (lo-mn)/(mx-mn)*100, w = (z.to-lo)/(mx-mn)*100;
+    return `<tr><td><b>Z${i+1}</b><span class="r">${esc(z.name)}</span></td><td class="tnum"><b>${z.from?`${z.from}–${z.to}`:`≤ ${z.to}`}</b><span class="r">bpm${z.pct?` · ${z.pct} van max`:""}</span></td>
+      <td><div style="position:relative;height:8px;border-radius:9px;background:var(--chip)"><div style="position:absolute;left:${l}%;width:${Math.max(w,2)}%;height:100%;border-radius:9px;background:${css(ZCOL[i]||"--faint")}"></div></div></td>${tcell(th?.[i])}</tr>`;
+  }).join("") + "</tbody>";
+}
+
+// --------------------------------------------------------------------- activiteiten
+function actRow(r){
+  const d = new Date(r.date+"T12:00:00");
+  return `<div class="act" data-id="${r.id}"><div class="d"><b>${d.getDate()}</b><span>${MONTHS[d.getMonth()]} · wk ${isoWeek(r.date)}</span></div>
+    <div class="n">${esc(r.name)} ${r.race?'<span class="badge orange">wedstrijd</span>':""}${r.te_label?` <span class="badge blue">${esc(prettify(r.te_label))}</span>`:""}<small>${(r.intervals||[]).join(" · ")||(r.vdot_race?`VDOT ${fmt(r.vdot_race,1)} ◆`:r.vdot_hr_cal?`VDOT ~${fmt(r.vdot_hr_cal,1)}`:"")}</small></div>
+    <div class="m"><b class="tnum">${fmt(r.km,2)}</b><span>km</span></div><div class="m"><b class="tnum">${mmss(r.pace_s_km)}</b><span>/km</span></div>
+    <div class="m x"><b class="tnum">${r.avg_hr??"–"}</b><span>bpm</span></div><div class="m x"><b class="tnum">${r.load??"–"}</b><span>belasting</span></div></div>`;
+}
+function bindActs(scope){ $$(`${scope} .act`).forEach(el => el.onclick = () => openRun(el.dataset.id)); }
+function renderActivities(){
+  const q = ($("#q").value||"").toLowerCase();
+  const list = D.activities.filter(r => !q || r.name.toLowerCase().includes(q) || r.date.includes(q) || `wk ${isoWeek(r.date)}`.includes(q));
+  $("#actCount").textContent = `${list.length} runs`;
+  $("#acts").innerHTML = list.map(actRow).join("") || `<div class="empty">Geen runs gevonden.</div>`;
+  bindActs("#acts");
+}
+async function openRun(id){
+  const r = D.activities.find(a=>a.id===id); if (!r) return;
+  $("#dTitle").textContent = r.name; $("#dSub").textContent = `${dayLabel(r.date)} · ${r.start?.slice(11,16)||""}`;
+  $("#dBody").innerHTML = `<div class="skeleton"></div>`; $("#drawer").classList.add("on"); $("#drawerBg").classList.add("on");
+  let det; try { det = await api(`/api/run?id=${encodeURIComponent(id)}`); } catch(e){ $("#dBody").innerHTML = `<div class="banner err">${esc(e.message)}</div>`; return; }
+  const kv = (k,v) => v==null||v==="–" ? "" : `<div><div class="k">${k}</div><div class="v tnum">${v}</div></div>`;
+  $("#dBody").innerHTML = (r.analysis ? `<div class="card"><h3>Analyse</h3><p class="cap">Wat er gebeurde, waarom, en wat je volgende keer anders kunt doen</p>${sessionBlock(r.analysis, true)}</div>` : "") + `<div class="card"><div class="kv">
+      ${kv("Afstand", fmt(r.km,2)+" km")}${kv("Tijd", hms(r.minutes*60))}${kv("Tempo", mmss(r.pace_s_km)+"/km")}${kv("GAP", r.gap_s_km?mmss(r.gap_s_km)+"/km":null)}
+      ${kv("Hartslag", r.avg_hr?`${r.avg_hr} / ${r.max_hr??"–"}`:null)}${kv("Vermogen", r.power?`${r.power} W (NP ${r.np??"–"})`:null)}${kv("Cadans", r.cadence?fmt(r.cadence,0)+" spm":null)}
+      ${kv("Hoogtemeters", r.elev)}${kv("Belasting", r.load)}${kv("TRIMP", r.trimp)}${kv("RPE / gevoel", r.rpe?`${r.rpe} / ${r.feel??"–"}`:null)}
+      ${kv("Training Effect", r.te_aerobic!=null?`${fmt(r.te_aerobic,1)} / ${fmt(r.te_anaerobic,1)}`:null)}${kv("HR-herstel 60 s", r.hrr60?r.hrr60+" slagen":null)}
+      ${kv("VDOT", r.vdot_race?fmt(r.vdot_race,1)+" ◆":r.vdot_hr_cal?"~"+fmt(r.vdot_hr_cal,1):null)}${kv("Ontkoppeling", r.decoupling!=null?r.decoupling+"%":null)}${kv("Calorieën", r.calories)}${kv("Stamina einde", r.stamina_end!=null?r.stamina_end+"%":null)}
+    </div>${r.intervals?.length?`<p class="cap" style="margin:12px 0 0">Intervallen: ${r.intervals.map(esc).join(" · ")}</p>`:""}</div>
+    <div class="card"><div class="row between"><h3>Verloop</h3><div class="seg" id="dSeg"><button data-k="pace" class="on">Tempo</button><button data-k="hr">Hartslag</button><button data-k="cadence">Cadans</button><button data-k="watts">Vermogen</button></div></div><div class="chart" style="height:240px"><canvas id="cRun"></canvas></div></div>
+    <div class="grid g2"><div class="card"><h3>Splits per km</h3><div class="tablewrap"><table>${splitsTable(det.splits)}</table></div></div>
+    <div class="card"><h3>Beste stukken</h3><div class="tablewrap"><table><thead><tr><th>Afstand</th><th>Tijd</th><th>VDOT</th></tr></thead><tbody>${r.efforts.map(e=>`<tr><td>${e.label}</td><td><b>${e.time}</b></td><td>${fmt(e.vdot,1)} ${e.hard?"◆":'<span class="badge">submax</span>'}</td></tr>`).join("")||'<tr><td colspan="3" class="muted">–</td></tr>'}</tbody></table></div></div></div>`;
+  const draw = k => {
+    const col = {pace:"--accent", hr:"--red", cadence:"--teal", watts:"--purple"}[k];
+    mk("cRun", {data:{labels:det.distance, datasets:[
+      {type:"line", label:{pace:"Tempo", hr:"Hartslag", cadence:"Cadans", watts:"Vermogen"}[k], data:det[k], borderColor:css(col), borderWidth:1.8, pointRadius:0, tension:.2, spanGaps:true},
+      {type:"line", label:"Hoogte", data:det.altitude, borderWidth:0, backgroundColor:alpha(css("--faint"),.18), fill:"origin", pointRadius:0, yAxisID:"y1"},
+    ]}, options:opts({legend:false, tooltipTitle:i=>`${det.distance[i[0].dataIndex]} km`, x:{ticks:{maxTicksLimit:10, callback:(v,i)=>det.distance[i]?.toFixed(0)+" km"}},
+      y:k==="pace"?{reverse:true, ticks:{callback:v=>mmss(v)}, suggestedMin:180, suggestedMax:480}:{}, y1:{display:false},
+      extra:{plugins:{legend:{display:false}, tooltip:{callbacks:{title:i=>`${det.distance[i[0].dataIndex]} km`, label:c=>c.dataset.label==="Hoogte"?`Hoogte ${Math.round(c.raw)} m`:k==="pace"?`Tempo ${mmss(c.raw)}/km`:`${c.dataset.label} ${c.raw}`}}}}})});
+  };
+  draw("pace");
+  $$("#dSeg button").forEach(b => b.onclick = () => { $$("#dSeg button").forEach(x=>x.classList.toggle("on", x===b)); draw(b.dataset.k); });
+}
+function splitsTable(S){
+  if (!S.length) return '<tbody><tr><td class="muted">Geen splits.</td></tr></tbody>';
+  const best = Math.min(...S.map(s=>s.time)), worst = Math.max(...S.map(s=>s.time));
+  return `<thead><tr><th>Km</th><th>Tijd</th><th></th><th>HR</th><th>Cadans</th><th>W</th><th>Hoogte</th></tr></thead><tbody>` + S.map(s=>{
+    const w = worst>best ? 30 + 70*(worst - s.time)/(worst-best) : 100;
+    return `<tr><td>${s.km}</td><td><b>${mmss(s.time)}</b></td><td style="width:30%"><div style="height:6px;border-radius:9px;background:var(--chip)"><div style="height:100%;width:${w}%;border-radius:9px;background:${s.time===best?css("--green"):css("--accent")}"></div></div></td><td>${s.hr??"–"}</td><td>${s.cadence??"–"}</td><td>${s.watts??"–"}</td><td>${s.elev!=null?(s.elev>0?"+":"")+s.elev:"–"}</td></tr>`;
+  }).join("") + "</tbody>";
+}
+function closeDrawer(){ $("#drawer").classList.remove("on"); $("#drawerBg").classList.remove("on"); }
+$("#dClose").onclick = closeDrawer; $("#drawerBg").onclick = closeDrawer;
+document.addEventListener("keydown", e => { if (e.key==="Escape") closeDrawer(); });
+
+const prettify = s => { s = String(s).replace(/_\d+$/,"").replace(/_/g," ").toLowerCase(); return s.charAt(0).toUpperCase()+s.slice(1); };
+
+// ===================================================================== tabs & acties
+function showTab(t){
+  $$(".tab").forEach(b => b.classList.toggle("on", b.dataset.t===t));
+  $$(".view").forEach(v => v.classList.toggle("on", v.dataset.view===t));
+  store.set("tab", t);
+  Object.values(charts).forEach(c => c.resize());
+  window.scrollTo({top:0});
+}
+$("#tabs").innerHTML = Object.keys(TAB_NAMES).map(t=>`<button class="tab" data-t="${t}">${svgI(ICONS[t])}<span>${TAB_NAMES[t]}</span></button>`).join("");
+$$(".tab").forEach(b => b.onclick = () => showTab(b.dataset.t));
+$("#q").oninput = () => D && renderActivities();
+$("#period").value = store.get("period", "12");
+$("#period").onchange = () => { store.set("period", $("#period").value); load(); };
+$("#km").oninput = () => { $("#kmVal").textContent = `${$("#km").value} km/week`; clearTimeout(kmTimer); kmTimer = setTimeout(load, 350); };
+const theme = store.get("theme", ""); if (theme) document.documentElement.dataset.theme = theme;
+$("#theme").onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark"; store.set("theme", document.documentElement.dataset.theme); if (D) render();
+};
+$("#sync").onclick = async () => {
+  $("#sync").disabled = true; $("#syncIc").classList.add("spin");
+  try { const r = await api("/api/sync", {}); if (!r.queued) await load(); } catch(e){ $("#banner").innerHTML = `<div class="banner err">${esc(e.message)}</div>`; }
+  $("#sync").disabled = false; $("#syncIc").classList.remove("spin");
+};
+async function load(){
+  try {
+    const km = $("#km").dataset.init ? `&km=${$("#km").value}` : "";
+    D = await api(`/api/dashboard?weeks=${$("#period").value}${km}`); render();
+  } catch(e){ $("#banner").innerHTML = `<div class="banner err"><b>Kan gegevens niet laden.</b> ${esc(e.message)}</div>`; $("#sub").textContent = "Fout"; }
+}
+showTab(store.get("tab", "overzicht"));
+if (STATIC){
+  $("#cloudCfg").style.display = ""; $("#cloudCfg").onclick = () => openCloudCfg();
+  unlock().then(load);
+} else load();
+</script>
+</body>
+</html>

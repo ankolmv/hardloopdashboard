@@ -1,0 +1,12 @@
+# Persoonlijk: nooit in de (publieke) repository
+.env
+.garmin_tokens/
+data/
+profiles/
+goal.json
+settings.json
+# Cloud-build artefacten
+state/
+site/
+__pycache__/
+*.pyc
