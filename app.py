@@ -228,7 +228,7 @@ def sel(rows, keys):
 
 
 # --------------------------------------------------------------------------- payload
-def build_payload(period_weeks=12, km_override=None):
+def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     data = store.load()
     if not data:
         store.sync()
@@ -243,6 +243,8 @@ def build_payload(period_weeks=12, km_override=None):
     tr = P.trend([{**w, "n": w["runs"]} for w in all_weeks], today,
                  anchor=best_recent["value"] if best_recent else None)
     settings = load_settings()
+    if hr_zones in ("model", "garmin"):  # weergavekeuze zonder de opgeslagen instelling te wijzigen
+        settings = {**settings, "hr_zones": hr_zones}
     garmin_floors = ctx.get("hr_floors")
     model_floors = M.model_hr_floors(tr["now"], ctx["rest_hr"], ctx["max_hr"]) if tr else None
     use_model = settings["hr_zones"] == "model" and model_floors

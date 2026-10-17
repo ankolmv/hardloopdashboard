@@ -118,20 +118,27 @@ def build(out):
     # Vast zout per repository: zo blijft de afgeleide sleutel gelijk tussen builds ("onthouden op dit apparaat")
     salt = hashlib.sha256(f"hs-dashboard:{os.environ.get('GITHUB_REPOSITORY', 'lokaal')}".encode()).digest()[:16]
     key = _derive(pw, salt)
+    # GitHub Pages cachet bestanden tot 10 min en negeert ?query. Daarom krijgt elke build een eigen map
+    # (data/<run-id>/); de pagina vraagt via de GitHub-API welke build de nieuwste is.
+    build_id = os.environ.get("GITHUB_RUN_ID") or dt.datetime.now().strftime("local%Y%m%d%H%M%S")
     if os.path.exists(out):
         shutil.rmtree(out)
-    os.makedirs(os.path.join(out, "data"))
+    ddir = os.path.join(out, "data", build_id)
+    os.makedirs(ddir)
 
     def put(name, obj):
         raw = json.dumps(obj, ensure_ascii=False, default=str, separators=(",", ":")).encode()
-        with open(os.path.join(out, "data", name), "wb") as f:
+        with open(os.path.join(ddir, name), "wb") as f:
             f.write(_encrypt(key, raw))
 
     base = None
     for weeks in PERIODS:
-        p = app.build_payload(weeks)
-        put(f"dash-{weeks}.enc", p)
-        base = base or p
+        # Beide zonebronnen vooraf bouwen: wisselen Model/Garmin gebeurt dan direct in de browser
+        for src in ("model", "garmin"):
+            p = app.build_payload(weeks, hr_zones=src)
+            put(f"dash-{weeks}-{src}.enc", p)
+            base = base or p
+        put(f"dash-{weeks}.enc", app.build_payload(weeks))  # volgens opgeslagen instelling
     # Scenario-schuif: alleen de scenario-sectie verschilt per km/week
     put("scenarios.enc", {km: app.build_payload(12, km)["training"]["scenario"] for km in KM_STEPS})
     # Streams/splits per run voor het detailpaneel (laatste 120 dagen)
@@ -141,11 +148,12 @@ def build(out):
     # na het inloggen automatisch acties kan starten (alleen 'Actions'-rechten op deze repository)
     put("cfg.enc", {"actions_token": os.environ.get("ACTIONS_TOKEN") or None})
 
-    meta = {"built_at": dt.datetime.now().isoformat(timespec="seconds"), "salt": base64.b64encode(salt).decode(),
+    meta = {"build": build_id, "built_at": dt.datetime.now().isoformat(timespec="seconds"), "salt": base64.b64encode(salt).decode(),
             "iterations": PBKDF2_ITER, "periods": PERIODS, "km_steps": list(KM_STEPS),
             "repo": os.environ.get("GITHUB_REPOSITORY", ""), "workflow": "dashboard.yml"}
-    with open(os.path.join(out, "data", "meta.json"), "w", encoding="utf-8") as f:
-        json.dump(meta, f)
+    for path in (os.path.join(ddir, "meta.json"), os.path.join(out, "data", "meta.json")):  # root = terugval
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(meta, f)
     with open(os.path.join(HERE, "static", "index.html"), encoding="utf-8") as f:
         html = f.read()
     html = html.replace("<script>\n// ===================================================================== utils",

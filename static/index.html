@@ -395,9 +395,27 @@ async function api(path, body){
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const toB64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
 function toast(msg, ms=4000){ const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), ms); }
-async function fetchMeta(){ META = await fetch(`data/meta.json?t=${Date.now()}`).then(r=>r.json()); return META; }
+// Repository afleiden uit de URL (<eigenaar>.github.io/<repo>/)
+const REPO = location.hostname.endsWith(".github.io") ? `${location.hostname.split(".")[0]}/${location.pathname.split("/").filter(Boolean)[0]||""}` : "";
+const WORKFLOW = "dashboard.yml";
+async function latestBuildId(){
+  // Nieuwste geslaagde run = nieuwste build. Publieke API, geen token nodig (met token als die er is: hogere limiet).
+  const t = store.get("gh_token","") || CFG_TOKEN;
+  const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/runs?status=success&per_page=1`,
+    {headers: t ? {Authorization:`Bearer ${t}`} : {}});
+  if (!r.ok) throw new Error(`API ${r.status}`);
+  return String((await r.json()).workflow_runs?.[0]?.id || "");
+}
+async function fetchMeta(buildId){
+  let id = buildId;
+  if (!id && REPO) { try { id = await latestBuildId(); } catch {} }
+  if (id) { const r = await fetch(`data/${id}/meta.json`); if (r.ok) return META = await r.json(); }
+  return META = await fetch(`data/meta.json`).then(r=>r.json());  // terugval (kan tot 10 min oud zijn)
+}
+let CFG_TOKEN = "";
 async function decryptFile(name, key=CK){
-  const buf = await fetch(`data/${name}?b=${encodeURIComponent(META.built_at)}`).then(r=>{ if(!r.ok) throw new Error(`${name} niet gevonden`); return r.arrayBuffer(); });
+  const dir = META.build ? `data/${META.build}/` : "data/";
+  const buf = await fetch(dir + name).then(r=>{ if(!r.ok) throw new Error(`${name} niet gevonden`); return r.arrayBuffer(); });
   const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv:new Uint8Array(buf,0,12)}, key, new Uint8Array(buf,12));
   return JSON.parse(new TextDecoder().decode(pt));
 }
@@ -412,7 +430,10 @@ async function staticApi(path, body){
     const u = new URL(path, location.origin);
     if (u.pathname.endsWith("/api/dashboard")){
       const w = META.periods.includes(+u.searchParams.get("weeks")) ? u.searchParams.get("weeks") : "12";
-      const p = structuredClone(await sget(`dash-${w}.enc`));
+      const src = store.get("hr_zones", "");
+      let p;
+      try { p = structuredClone(await sget(src ? `dash-${w}-${src}.enc` : `dash-${w}.enc`)); }
+      catch { p = structuredClone(await sget(`dash-${w}.enc`)); }  // oudere build zonder varianten
       if (u.searchParams.get("km") != null){
         const sc = await sget("scenarios.enc"), k = String(Math.max(0, Math.min(100, Math.round(+u.searchParams.get("km")/5)*5)));
         if (sc[k]) p.training.scenario = sc[k];
@@ -429,9 +450,11 @@ async function staticApi(path, body){
   return dispatchAction(path.split("/").pop(), body || {});
 }
 async function sharedToken(){
-  try { return (await sget("cfg.enc")).actions_token || ""; } catch { return ""; }
+  try { return CFG_TOKEN = (await sget("cfg.enc")).actions_token || ""; } catch { return ""; }
 }
+let busy = null;
 async function dispatchAction(action, args){
+  if (busy) throw new Error(`Er loopt al een actie (${busy}). Wacht tot die klaar is.`);
   const token = store.get("gh_token", "") || await sharedToken();
   if (!token){ openCloudCfg("Vul eerst je GitHub-token in om acties vanaf deze site te starten."); throw new Error("Geen GitHub-token ingesteld"); }
   const r = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows/${META.workflow}/dispatches`, {method:"POST",
@@ -439,20 +462,43 @@ async function dispatchAction(action, args){
     body:JSON.stringify({ref:"main", inputs:{action, args:JSON.stringify(args)}})});
   if (r.status !== 204){ const t = await r.text(); throw new Error(`GitHub weigerde de actie (${r.status}). ${r.status===401?"De token is ongeldig of verlopen: open het tandwiel en vul een nieuwe in."
     : r.status===403||r.status===404?"De token mist rechten: zet bij de token Actions op 'Read and write' voor deze repository.":t.slice(0,120)}`); }
-  toast("Actie gestart op GitHub. Het dashboard ververst vanzelf zodra hij klaar is (1–3 min).", 6000);
-  waitForBuild(META.built_at);
+  toast("Actie gestart op GitHub. Je ziet de voortgang bovenin.", 4000);
+  trackRun(action, args, token, new Date(Date.now() - 15000), 0);
   return {queued:true};
 }
-let waiting = null;
-function waitForBuild(prev){
-  clearInterval(waiting); const t0 = Date.now();
-  $("#sub").textContent = "Bezig met bijwerken op GitHub…";
-  waiting = setInterval(async () => {
-    try { const m = await fetch(`data/meta.json?t=${Date.now()}`).then(r=>r.json());
-      if (m.built_at !== prev){ clearInterval(waiting); META = m; DCACHE = {}; toast("Bijgewerkt ✓"); load(); }
-      else if (Date.now()-t0 > 10*60e3){ clearInterval(waiting); toast("Duurt langer dan verwacht; kijk bij Actions op GitHub."); load(); }
+const ACTION_NL = {sync:"synchroniseren", goal:"doel opslaan", settings:"instelling opslaan", push_workout:"training naar Garmin",
+                   unpush_workout:"training van Garmin halen", garmin_zones:"zones naar Garmin"};
+async function trackRun(action, args, token, since, retries){
+  busy = ACTION_NL[action] || action;
+  const h = {Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json"};
+  const setSub = txt => $("#sub").textContent = `${busy[0].toUpperCase()+busy.slice(1)}: ${txt}`;
+  setSub("starten…");
+  const t0 = Date.now(); let runId = null;
+  while (Date.now() - t0 < 12*60e3){
+    await new Promise(r => setTimeout(r, runId ? 8000 : 4000));
+    try {
+      if (!runId){
+        const j = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows/${META.workflow}/runs?event=workflow_dispatch&per_page=5`, {headers:h}).then(r=>r.json());
+        const run = (j.workflow_runs||[]).find(r => new Date(r.created_at) >= since);
+        if (!run) continue;
+        runId = run.id;
+      }
+      const run = await fetch(`https://api.github.com/repos/${META.repo}/actions/runs/${runId}`, {headers:h}).then(r=>r.json());
+      if (run.status !== "completed"){ setSub(run.status === "in_progress" ? "bezig op GitHub…" : "in de wachtrij…"); continue; }
+      if (run.conclusion === "success"){
+        busy = null; DCACHE = {}; await fetchMeta(String(runId)); toast("Bijgewerkt ✓"); load(); return;
+      }
+      if (run.conclusion === "cancelled" && retries < 2){
+        // Verdrongen door een andere run in de wachtrij: opnieuw starten
+        busy = null;
+        const r = await fetch(`https://api.github.com/repos/${META.repo}/actions/workflows/${META.workflow}/dispatches`, {method:"POST", headers:h,
+          body:JSON.stringify({ref:"main", inputs:{action, args:JSON.stringify(args)}})});
+        if (r.status === 204) return trackRun(action, args, token, new Date(Date.now() - 15000), retries + 1);
+      }
+      busy = null; toast(`De actie is ${run.conclusion === "failure" ? "mislukt" : "niet uitgevoerd"} op GitHub. Bekijk de details bij Actions.`, 7000); load(); return;
     } catch {}
-  }, 15000);
+  }
+  busy = null; toast("Duurt langer dan verwacht; kijk bij Actions op GitHub.", 6000); load();
 }
 // Controleert of een token geldig is en bij de Actions van deze repository kan
 async function checkToken(t){
@@ -494,12 +540,13 @@ function openCloudCfg(msg=""){
   bg.querySelector("#tokDel").onclick = () => { try { localStorage.removeItem("gh_token"); } catch {} toast("Token verwijderd"); close(); };
   bg.querySelector("#lockNow").onclick = () => { try { localStorage.removeItem("hs_key"); } catch {} location.reload(); };
 }
+async function unlockMeta(){ await fetchMeta(); if (!META.repo) META.repo = REPO; if (!META.workflow) META.workflow = WORKFLOW; }
 async function unlock(){
   if (!window.isSecureContext || !crypto.subtle){
     document.body.innerHTML = `<div class="lock"><div class="box"><h2 style="margin:0">Niet beveiligd</h2><p class="muted">Open het dashboard via <b>https://</b>; ontsleutelen werkt alleen op een beveiligde verbinding.</p></div></div>`;
     return new Promise(() => {});
   }
-  await fetchMeta();
+  await unlockMeta();
   const saved = store.get("hs_key", "");
   if (saved){
     try { CK = await crypto.subtle.importKey("raw", b64(saved), "AES-GCM", true, ["decrypt"]); await sget("dash-12.enc"); return; }
@@ -980,7 +1027,9 @@ function renderZones(){
   $("#pzCap").textContent += ` Jouw tijd = aandeel van je looptijd in de gekozen periode, berekend uit het tempo per seconde met deze drempel (stilstaan telt niet mee).`;
   const hzSrc = Z.hr_active, hzRows = Z.hr_zones_by?.[hzSrc] || Z.hr_zones;
   $$("#hzSeg button").forEach(b => { b.classList.toggle("on", b.dataset.s===hzSrc); b.disabled = !Z.hr_zones_by?.[b.dataset.s];
-    b.onclick = async () => { if (b.dataset.s===hzSrc) return; await api("/api/settings", {hr_zones:b.dataset.s}); await load(); }; });
+    b.onclick = async () => { if (b.dataset.s===hzSrc) return;
+      if (STATIC) { store.set("hr_zones", b.dataset.s); await load(); return; }  // online: direct wisselen, per apparaat
+      await api("/api/settings", {hr_zones:b.dataset.s}); await load(); }; });
   $("#hzCap").textContent = hzSrc==="model"
     ? `Berekend uit je VDOT (${fmt(Z.vdot_now,1)}): Daniels-intensiteiten omgezet naar hartslag via je hartslagreserve (rust ${Z.rest_hr}, max ${Z.max_hr} uit Garmin). Schuift mee met je conditie. Deze zones gebruikt het hele dashboard.`
     : Z.hr_source==="garmin"
