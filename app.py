@@ -144,12 +144,14 @@ def garmin_watch_status(ctx, model_rows):
         return None
     watch = ctx["hr_floors"]
     model = [watch[0]] + [r["from"] for r in model_rows[1:]]
-    return {"watch": watch, "model": model, "in_sync": all(abs(a - b) <= 1 for a, b in zip(watch[1:], model[1:])),
+    sports = ctx.get("hr_zones_all") or {"RUNNING": watch}
+    off = [s for s, fl in sports.items() if not all(abs(a - b) <= 1 for a, b in zip(fl[1:], model[1:]))]
+    return {"watch": watch, "model": model, "in_sync": not off, "off_sports": off, "sports": sports,
             "backup": os.path.exists(ZONES_BACKUP_PATH)}
 
 
 def set_garmin_zones(body):
-    """Model-zones als hardloopzones op Garmin zetten (of de backup terugzetten)."""
+    """Model-zones op Garmin zetten voor alle sporten (of de originele zones terugzetten)."""
     g = garmin_client.connect()
     current = g.get_heart_rate_zones_v2()
     if not isinstance(current, list) or not current:
@@ -159,12 +161,13 @@ def set_garmin_zones(body):
             raise ValueError("Er is geen backup van je originele Garmin-zones.")
         with open(ZONES_BACKUP_PATH, encoding="utf-8") as f:
             backup = json.load(f)
-        orig = next((z for z in backup if z.get("sport") == "RUNNING"), None)
-        if orig:
-            g.update_heart_rate_zones([orig])
-        else:  # er was geen aparte RUNNING-zone: terug naar de DEFAULT-waarden
-            base = next((z for z in backup if z.get("sport") == "DEFAULT"), backup[0])
-            g.update_heart_rate_zones([{**base, "sport": "RUNNING"}])
+        restore = [{**z, "changeState": "CHANGED"} for z in backup]
+        base = next((z for z in backup if z.get("sport") == "DEFAULT"), backup[0])
+        # Sporten die het dashboard heeft toegevoegd (niet in de backup) terug naar de standaardwaarden
+        for z in current:
+            if z.get("sport") not in {b.get("sport") for b in backup}:
+                restore.append({**base, "sport": z.get("sport"), "changeState": "CHANGED"})
+        g.update_heart_rate_zones(restore)
         os.remove(ZONES_BACKUP_PATH)
     else:
         p = build_payload()
@@ -173,17 +176,19 @@ def set_garmin_zones(body):
             raise ValueError("Model-zones zijn nog niet beschikbaar.")
         if not os.path.exists(ZONES_BACKUP_PATH):
             _write_json(ZONES_BACKUP_PATH, current)
-        obj = _running_zone_obj(current)
-        for i, r in enumerate(rows[1:], start=2):
-            obj[f"zone{i}Floor"] = r["from"]
-        obj["maxHeartRateUsed"] = p["zones"]["max_hr"]
-        obj["restingHeartRateUsed"] = p["zones"]["rest_hr"]
-        obj["changeState"] = "CHANGED"
-        g.update_heart_rate_zones([obj])
+        objs = [dict(z) for z in current]
+        if not any(z.get("sport") == "RUNNING" for z in objs):
+            objs.append(_running_zone_obj(current))
+        for obj in objs:  # alle sporten: standaard, hardlopen, fietsen, ...
+            for i, r in enumerate(rows[1:], start=2):
+                obj[f"zone{i}Floor"] = r["from"]
+            obj["maxHeartRateUsed"] = p["zones"]["max_hr"]
+            obj["restingHeartRateUsed"] = p["zones"]["rest_hr"]
+            obj["changeState"] = "CHANGED"
+        g.update_heart_rate_zones(objs)
     after = g.get_heart_rate_zones_v2()
-    run = next((z for z in after if z.get("sport") == "RUNNING"), None) or {}
     store.sync()  # nieuwe zones in de cache
-    return {"ok": True, "running_floors": [run.get(f"zone{i}Floor") for i in range(1, 6)]}
+    return {"ok": True, "zones": {z.get("sport"): [z.get(f"zone{i}Floor") for i in range(1, 6)] for z in after}}
 
 
 def load_goal():

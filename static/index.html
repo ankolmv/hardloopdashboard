@@ -994,16 +994,16 @@ function renderZones(){
   const GW = Z.garmin_watch;
   $("#watchZones").innerHTML = !GW || !D.garmin_linked ? "" : `<div class="banner ${GW.in_sync?"":"laag"}">
     <span class="badge ${GW.in_sync?"green":"orange"}">${GW.in_sync?"Horloge = model":"Horloge wijkt af"}</span>
-    <span class="muted">Zones op je horloge: ${GW.watch.slice(1).map((f,i)=>`Z${i+2} ≥ ${f}`).join(", ")}. Model: ${GW.model.slice(1).map((f,i)=>`Z${i+2} ≥ ${f}`).join(", ")}.</span>
+    <span class="muted">${Object.entries(GW.sports||{}).map(([sp,fl])=>`${{DEFAULT:"Standaard",RUNNING:"Hardlopen",CYCLING:"Fietsen",SWIMMING:"Zwemmen"}[sp]||sp}: ${fl.slice(1).map((f,i)=>`Z${i+2} ≥ ${f}`).join(", ")}`).join(" · ")}. Model: ${GW.model.slice(1).map((f,i)=>`Z${i+2} ≥ ${f}`).join(", ")}.</span>
     ${GW.in_sync?"":`<button class="btn primary" id="zonesToWatch">Zet model-zones op mijn Garmin</button>`}
     ${GW.backup?`<button class="btn" id="zonesRestore">Herstel originele Garmin-zones</button>`:""}<span class="muted" id="zonesMsg"></span></div>`;
   $("#zonesToWatch") && ($("#zonesToWatch").onclick = async () => {
-    if (!confirm("De hartslagzones voor hardlopen in je Garmin-account vervangen door de model-zones? Je originele zones worden eerst bewaard, zodat je ze kunt terugzetten.")) return;
+    if (!confirm("De hartslagzones voor álle sporten in je Garmin-account vervangen door de model-zones? Je originele zones worden eerst bewaard, zodat je ze kunt terugzetten.")) return;
     $("#zonesMsg").textContent = "Bezig…";
     try { await api("/api/garmin_zones", {}); await load(); } catch(e){ $("#zonesMsg").textContent = e.message; }
   });
   $("#zonesRestore") && ($("#zonesRestore").onclick = async () => {
-    if (!confirm("Je originele Garmin-hartslagzones voor hardlopen terugzetten?")) return;
+    if (!confirm("Je originele Garmin-hartslagzones (alle sporten) terugzetten?")) return;
     $("#zonesMsg").textContent = "Bezig…";
     try { await api("/api/garmin_zones", {restore:true}); await load(); } catch(e){ $("#zonesMsg").textContent = e.message; }
   });

@@ -446,6 +446,7 @@ def build(data):
         "hr_source": "garmin" if ghz else "intervals",
         "hr_floors": [f for f in (ghz or {}).get("floors", []) if f] or None,
         "hr_method": (ghz or {}).get("method"),
+        "hr_zones_all": next((s["hr_zones_all"] for s in reversed(snaps) if s.get("hr_zones_all")), None),
         "rest_hr": statistics.median(rests) if rests else 50,
         "tp": run_settings.get("threshold_pace"),
         "wellness": wl, "garmin_acts": data.get("garmin_activities") or [],

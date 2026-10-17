@@ -136,6 +136,7 @@ def fetch_snapshot(g, today):
     hz = _try(g.get_heart_rate_zones_v2) or _try(g.get_heart_rate_zones)
     if isinstance(hz, list) and hz:
         z = next((x for x in hz if x.get("sport") == "RUNNING"), None) or next((x for x in hz if x.get("sport") == "DEFAULT"), hz[0])
+        out["hr_zones_all"] = {x.get("sport"): [x.get(f"zone{i}Floor") for i in range(1, 6)] for x in hz}
         out["hr_zones"] = {"method": z.get("trainingMethod"), "max": z.get("maxHeartRateUsed"),
                            "rest": z.get("restingHeartRateUsed"), "lthr": z.get("lactateThresholdHeartRateUsed"),
                            "floors": [z.get(f"zone{i}Floor") for i in range(1, 6)], "sport": z.get("sport")}
