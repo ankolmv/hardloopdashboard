@@ -22,7 +22,7 @@ import insights
 import metrics as M
 import projection as P
 import store
-from intervals_client import IntervalsError
+from intervals_client import IntervalsError, load_env
 
 PORT = int(os.environ.get("HS_PORT", "8765"))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +71,15 @@ def save_settings(body):
         s["hr_zones"] = body["hr_zones"]
     if isinstance(body.get("long_days"), list):
         s["long_days"] = sorted({int(d) for d in body["long_days"] if 0 <= int(d) <= 6})
+    if "home" in body:  # startpunt voor routes: [lat, lon]
+        h = body["home"]
+        try:
+            lat, lon = float(h[0]), float(h[1])
+        except (TypeError, ValueError, IndexError):
+            raise ValueError("Startpunt moet twee getallen zijn: breedtegraad en lengtegraad, bijv. 52.2, 4.9.")
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError("Startpunt ligt buiten het geldige bereik.")
+        s["home"] = [round(lat, 6), round(lon, 6)]
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(s, f, indent=2)
     return s
@@ -587,6 +596,9 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         "profile": paths.PROFILE, "period": period_weeks, "ctx": ctx,
         "goal": goal_out, "overview": overview, "performance": perf, "training": training,
         "recovery": recovery, "technique": technique, "zones": zones, "activities": activities, "labels": M.RACE_LABELS,
+        # Route: startpunt + afstand van de suggestie; de ORS-sleutel alleen lokaal (online zit hij versleuteld in cfg.enc)
+        "route": {"home": settings.get("home"), "est_km": (suggestion or {}).get("est_km"),
+                  "ors_key": None if os.environ.get("GITHUB_ACTIONS") else load_env().get("ORS_API_KEY")},
     }
 
 

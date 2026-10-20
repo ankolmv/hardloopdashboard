@@ -37,6 +37,11 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 - **Duurcorrectie**: vanaf 10 km geleidelijk extra tijd bij weinig km/week of korte lange duurlopen.
 - **Garmin Connect** gaat via de onofficiële `garminconnect`-library; als Garmin iets wijzigt valt alleen dat deel weg.
 
+## Looproutes
+Op Overzicht maakt het dashboard een route vanaf je startpunt: een rondje of heen-en-terug, met de eerste helft
+tegen de wind in (wind via Open-Meteo, route via OpenRouteService). Eenmalig: maak een gratis sleutel op
+openrouteservice.org en voer `set_ors_key.ps1` uit (zet hem in `.env` en als secret `ORS_KEY`).
+
 ## Garmin-login: pc en cloud apart
 De cloud ververst zijn Garmin-token bij elke run; daardoor wordt een gedeelde kopie ongeldig. Gebruik daarom op de
 pc een eigen login (`python garmin_login.py`) en deel het tokenbestand niet met de cloud (die heeft zijn eigen token

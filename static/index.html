@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 :root{
   --bg:#f4f5f7;--bg2:#eceef2;--card:#ffffff;--text:#14171c;--muted:#6b7280;--faint:#9ca3af;--line:#e6e8ec;--chip:#f1f3f6;
@@ -222,6 +224,14 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .drawer.on{transform:none}.drawer-bg.on{opacity:1;pointer-events:auto}
 .drawer .head{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px;z-index:2}
 .drawer .body{padding:16px;display:grid;gap:14px}
+.routemap{height:380px;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin-top:12px;z-index:0}
+@media (max-width:600px){.routemap{height:300px}}
+.route-ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.route-ctrl input{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:7px 10px;color:var(--text);font:inherit}
+.route-ctrl input.km{width:80px}.route-ctrl input.ll{width:190px}
+.windbox{display:flex;gap:10px;align-items:center}
+.windbox svg{width:34px;height:34px;flex:none}
+.kmlabel{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;font:600 10px Inter,sans-serif;padding:0 3px;white-space:nowrap}
 .lock{position:fixed;inset:0;z-index:60;background:var(--bg);display:grid;place-items:center;padding:20px}
 .lock .box{width:min(380px,100%);background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;box-shadow:var(--shadow);display:grid;gap:12px}
 .lock input[type=password],.modal input{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:10px 12px;font:inherit;color:var(--text)}
@@ -261,6 +271,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <div class="card" id="sugCard"></div>
       <div class="card" id="lastCard"></div>
     </div>
+    <div class="card" id="routeCard"></div>
     <div class="grid tiles" id="tiles"></div>
     <div class="grid g2">
       <div class="card"><div class="row between"><div><h3>Inzichten</h3><p class="cap">Automatisch uit je data, per categorie</p></div><div class="chips" id="insChips"></div></div><div class="ins" id="insights"></div></div>
@@ -702,6 +713,145 @@ function focusHtml(F, compact){
     </div>`).join("")}</div>`;
 }
 
+// ===================================================================== route (OpenRouteService + Open-Meteo)
+const RT = {mode: store.get("route_mode", "loop"), cands: [], idx: 0, seedBase: 1, map: null, layers: null, wind: null, start: null, km: null, busy: false};
+const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+function hav(a, b){ const R = 6371000, dLa = toRad(b[0]-a[0]), dLo = toRad(b[1]-a[1]);
+  const x = Math.sin(dLa/2)**2 + Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
+function bearing(a, b){ const y = Math.sin(toRad(b[1]-a[1]))*Math.cos(toRad(b[0]));
+  const x = Math.cos(toRad(a[0]))*Math.sin(toRad(b[0])) - Math.sin(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.cos(toRad(b[1]-a[1]));
+  return (toDeg(Math.atan2(y, x)) + 360) % 360; }
+function project(a, brg, dist){ const R = 6371000, d = dist / R, t = toRad(brg), la = toRad(a[0]), lo = toRad(a[1]);
+  const la2 = Math.asin(Math.sin(la)*Math.cos(d) + Math.cos(la)*Math.sin(d)*Math.cos(t));
+  const lo2 = lo + Math.atan2(Math.sin(t)*Math.sin(d)*Math.cos(la), Math.cos(d) - Math.sin(la)*Math.sin(la2));
+  return [toDeg(la2), toDeg(lo2)]; }
+function routeLength(c){ let L = 0; for (let i = 1; i < c.length; i++) L += hav(c[i-1], c[i]); return L; }
+// Windscore: gemiddelde tegenwind (cos tussen looprichting en windrichting-waar-hij-vandaan-komt) 1e helft min 2e helft
+function windScore(c, windFrom){
+  const L = routeLength(c); let acc = 0, s1 = 0, w1 = 0, s2 = 0, w2 = 0;
+  for (let i = 1; i < c.length; i++){ const d = hav(c[i-1], c[i]); if (!d) continue;
+    const h = Math.cos(toRad(bearing(c[i-1], c[i]) - windFrom)); const mid = acc + d/2;
+    if (mid <= L/2){ s1 += h*d; w1 += d; } else { s2 += h*d; w2 += d; } acc += d; }
+  const h1 = w1 ? s1/w1 : 0, h2 = w2 ? s2/w2 : 0;
+  return {score: h1 - h2, head1: h1, head2: h2, len: L};
+}
+async function orsKey(){ if (D.route?.ors_key) return D.route.ors_key; if (STATIC){ try { return (await sget("cfg.enc")).ors_key || ""; } catch {} } return ""; }
+async function ors(body){
+  const key = await orsKey();
+  const r = await fetch("https://api.openrouteservice.org/v2/directions/foot-walking/geojson", {method:"POST",
+    headers:{Authorization:key, "Content-Type":"application/json", Accept:"application/geo+json"}, body:JSON.stringify(body)});
+  if (!r.ok){ let m = ""; try { m = (await r.json()).error?.message || ""; } catch {}
+    throw new Error(r.status===401||r.status===403 ? "OpenRouteService weigert de sleutel (controleer je ORS-sleutel of het dagtegoed)." :
+      r.status===404 ? "Geen looppad gevonden bij dit startpunt. Kies een punt dichter bij een weg of pad." : `OpenRouteService gaf ${r.status}. ${m}`); }
+  const j = await r.json(); return j.features[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
+}
+async function fetchWind(start){
+  const u = `https://api.open-meteo.com/v1/forecast?latitude=${start[0]}&longitude=${start[1]}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kmh&timezone=auto`;
+  const j = await fetch(u).then(r => r.json()); const c = j.current || {};
+  return {speed: c.wind_speed_10m, from: c.wind_direction_10m, gusts: c.wind_gusts_10m, time: (c.time||"").slice(11, 16)};
+}
+const COMPASS = ["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW","W","WNW","NW","NNW"];
+const beaufort = kmh => [1,6,12,20,29,39,50,62,75,89,103,118].findIndex(x => kmh < x) === -1 ? 12 : [1,6,12,20,29,39,50,62,75,89,103,118].findIndex(x => kmh < x);
+function parseLL(v){ const m = String(v||"").replace(/[()]/g,"").split(/[,;\s]+/).filter(Boolean).map(Number); return m.length === 2 && m.every(isFinite) ? m : null; }
+
+async function makeLoops(start, L, windFrom){
+  const seeds = [...Array(6).keys()].map(i => RT.seedBase + i);
+  const res = await Promise.allSettled(seeds.map(seed => ors({coordinates:[[start[1], start[0]]], options:{round_trip:{length:Math.round(L), points:4, seed}}})));
+  const ok = res.filter(r => r.status === "fulfilled").map(r => r.value);
+  if (!ok.length) throw (res[0].reason || new Error("Geen routes gevonden."));
+  let c = [];
+  for (const coords of ok){ for (const dir of [coords, [...coords].reverse()]){ const w = windScore(dir, windFrom); c.push({coords:dir, ...w}); } }
+  const near = c.filter(x => Math.abs(x.len - L) / L <= 0.12);
+  c = (near.length ? near : c.sort((a,b)=>Math.abs(a.len-L)-Math.abs(b.len-L)).slice(0,4));
+  return c.sort((a,b) => b.score - a.score);
+}
+async function makeOutBack(start, L, windFrom, offset){
+  const brg = (windFrom + offset + 360) % 360; let straight = 0.8 * L / 2, path = null;
+  for (let i = 0; i < 3; i++){
+    path = await ors({coordinates:[[start[1], start[0]], [project(start, brg, straight)[1], project(start, brg, straight)[0]]]});
+    const d = routeLength(path); if (Math.abs(d - L/2) / (L/2) <= 0.05) break;
+    straight *= (L/2) / d;
+  }
+  const coords = [...path, ...[...path].reverse().slice(1)];
+  return {coords, ...windScore(coords, windFrom)};
+}
+async function buildRoute(newSet){
+  if (RT.busy) return; RT.busy = true; const msg = $("#routeMsg"); msg.textContent = "Route berekenen…";
+  try {
+    const start = parseLL($("#rtStart").value); const km = parseFloat(String($("#rtKm").value).replace(",", "."));
+    if (!start) throw new Error("Vul een startpunt in als breedtegraad, lengtegraad (bijv. 52.0907, 5.1214).");
+    if (!(km >= 1 && km <= 50)) throw new Error("Kies een afstand tussen 1 en 50 km.");
+    store.set("route_start", start.join(", ")); RT.start = start; RT.km = km;
+    RT.wind = await fetchWind(start);
+    const L = km * 1000, wf = RT.wind.from ?? 0;
+    if (RT.mode === "loop"){
+      if (newSet || !RT.cands.length){ RT.cands = await makeLoops(start, L, wf); RT.idx = 0; }
+    } else {
+      const offs = [0, 25, -25, 50, -50]; if (newSet || !RT.cands.length) RT.cands = [];
+      const off = offs[RT.cands.length % offs.length]; RT.cands.push(await makeOutBack(start, L, wf, off)); RT.idx = RT.cands.length - 1;
+    }
+    drawRoute(); msg.textContent = "";
+  } catch(e){ msg.textContent = e.message; }
+  RT.busy = false;
+}
+function drawRoute(){
+  const r = RT.cands[RT.idx]; if (!r) return;
+  if (!RT.map){ RT.map = L.map("routeMap", {zoomControl:true, attributionControl:true});
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · route: openrouteservice.org'}).addTo(RT.map); }
+  RT.layers?.remove(); RT.layers = L.layerGroup().addTo(RT.map);
+  // Eerste helft (tegen de wind) in accentkleur, tweede helft in blauw; km-markeringen
+  const half = r.len / 2; let acc = 0; const first = [r.coords[0]], second = [], kms = [];
+  let nextKm = 1000;
+  for (let i = 1; i < r.coords.length; i++){ const d = hav(r.coords[i-1], r.coords[i]); acc += d;
+    (acc <= half ? first : second).push(r.coords[i]); if (acc > half && second.length === 1) first.push(r.coords[i]);
+    while (acc >= nextKm && nextKm < r.len - 200){ kms.push([r.coords[i], nextKm/1000]); nextKm += 1000; } }
+  L.polyline(second.length ? [first[first.length-1], ...second] : [], {color:css("--blue"), weight:5, opacity:.85}).addTo(RT.layers);
+  L.polyline(first, {color:css("--accent"), weight:5, opacity:.9}).addTo(RT.layers);
+  for (const [ll, k] of kms) L.marker(ll, {icon:L.divIcon({className:"kmlabel", html:`${k}`, iconSize:null})}).addTo(RT.layers);
+  L.circleMarker(r.coords[0], {radius:8, color:"#fff", weight:3, fillColor:css("--green"), fillOpacity:1}).bindTooltip("Start / finish").addTo(RT.layers);
+  RT.map.fitBounds(L.polyline(r.coords).getBounds(), {padding:[24,24]});
+  setTimeout(() => RT.map.invalidateSize(), 50);
+  const w = RT.wind, pct = v => Math.round(Math.max(0, v) * 100);
+  const blowTo = ((w.from ?? 0) + 180) % 360, weak = (w.speed ?? 0) < 10;
+  $("#routeInfo").innerHTML = `<div class="kv">
+      <div><div class="k">Afstand</div><div class="v tnum">${fmt(r.len/1000, 1)} km</div></div>
+      <div class="windbox"><svg viewBox="0 0 24 24"><g transform="rotate(${blowTo} 12 12)"><path d="M12 3v16M6 13l6 6 6-6" fill="none" stroke="${css("--blue")}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+        <div><div class="k">Wind${w.time?` (${w.time})`:""}</div><div class="v tnum">${fmt(w.speed,0)} km/u</div><div class="muted" style="font-size:11.5px">uit ${COMPASS[Math.round((w.from??0)/22.5)%16]} · Bft ${beaufort(w.speed??0)}${w.gusts?` · stoten ${fmt(w.gusts,0)}`:""}</div></div></div>
+      <div><div class="k">1e helft tegenwind</div><div class="v tnum">${pct(r.head1)}%</div></div>
+      <div><div class="k">2e helft wind mee</div><div class="v tnum">${pct(-r.head2)}%</div></div></div>
+    <p class="cap" style="margin:10px 0 0"><span style="color:${css("--accent")};font-weight:700">━</span> eerste helft (tegen de wind) · <span style="color:${css("--blue")};font-weight:700">━</span> tweede helft (wind mee) · getallen = km.
+      ${weak ? "Er staat weinig wind, dus de richting maakt nauwelijks uit." : ""} Route ${RT.idx+1}${RT.mode==="loop"?` van ${RT.cands.length}`:""}.</p>`;
+}
+function renderRouteCard(){
+  const R = D.route || {};
+  const startVal = store.get("route_start", "") || (R.home ? R.home.join(", ") : "");
+  const km = RT.km || R.est_km || 8;
+  $("#routeCard").innerHTML = `<div class="row between"><div><h3>Route voor vandaag</h3>
+      <p class="cap" title="Je startpunt wordt alleen naar OpenRouteService (route) en Open-Meteo (wind) gestuurd.">Begint tegen de wind in, zodat je terug wind mee hebt. Afstand standaard volgens je training.</p></div>
+      <div class="seg" id="rtMode"><button data-m="loop">Rondje</button><button data-m="outback">Heen en terug</button></div></div>
+    <div class="route-ctrl"><label class="muted" style="font-size:12px">Start</label><input class="ll" id="rtStart" placeholder="52.0907, 5.1214" value="${esc(startVal)}">
+      <button class="btn icon" id="rtGeo" title="Mijn huidige locatie">${svgI('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>').replace("<svg",'<svg width="15" height="15"')}</button>
+      <label class="muted" style="font-size:12px">Km</label><input class="km" id="rtKm" inputmode="decimal" value="${fmt(km,1)}">
+      <button class="btn primary" id="rtGo">Maak route</button><button class="btn" id="rtNext">Andere route</button>
+      <button class="btn" id="rtSave" title="Bewaar als standaard startpunt (alle apparaten)">Startpunt opslaan</button></div>
+    <div id="routeMsg" class="muted" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
+    <div id="routeInfo"></div><div class="routemap" id="routeMap"></div>`;
+  RT.map = null; RT.layers = null;
+  $$("#rtMode button").forEach(b => { b.classList.toggle("on", b.dataset.m === RT.mode);
+    b.onclick = () => { RT.mode = b.dataset.m; store.set("route_mode", RT.mode); RT.cands = []; $$("#rtMode button").forEach(x=>x.classList.toggle("on", x===b)); buildRoute(true); }; });
+  $("#rtGo").onclick = () => { RT.seedBase = 1; RT.cands = []; buildRoute(true); };
+  $("#rtNext").onclick = () => {
+    if (RT.mode === "loop"){ if (RT.idx + 1 < RT.cands.length){ RT.idx++; drawRoute(); } else { RT.seedBase += 6; buildRoute(true); } }
+    else buildRoute(false);
+  };
+  $("#rtGeo").onclick = () => navigator.geolocation?.getCurrentPosition(p => { $("#rtStart").value = `${p.coords.latitude.toFixed(5)}, ${p.coords.longitude.toFixed(5)}`; },
+    () => { $("#routeMsg").textContent = "Locatie niet beschikbaar."; });
+  $("#rtSave").onclick = async () => { const ll = parseLL($("#rtStart").value); if (!ll) return $("#routeMsg").textContent = "Ongeldig startpunt.";
+    try { await api("/api/settings", {home: ll}); $("#routeMsg").textContent = STATIC ? "Wordt opgeslagen via GitHub (1–2 min)." : "Opgeslagen als standaard."; } catch(e){ $("#routeMsg").textContent = e.message; } };
+  orsKey().then(k => { if (!k){ $("#routeMsg").innerHTML = `Nog geen OpenRouteService-sleutel ingesteld. Maak een gratis sleutel op <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a> en voer <code>set_ors_key.ps1</code> uit.`;
+    $("#rtGo").disabled = $("#rtNext").disabled = true; } });
+}
+
 // ===================================================================== render
 function render(){
   Chart.defaults.color = css("--muted"); Chart.defaults.borderColor = css("--line");
@@ -739,7 +889,7 @@ function renderOverview(){
     $("#hero").innerHTML = `<div class="hero-grid"><div></div><div><div class="eyebrow">Jouw doel</div><div class="goal">Stel een doel in</div><p style="opacity:.9;margin:0">Kies een afstand en een doeltijd. Het dashboard laat zien hoe ver je bent en wanneer je het waarschijnlijk haalt.</p></div>${goalForm(g||{})}</div>`;
   }
   $("#goalSave").onclick = saveGoal;
-  renderSuggestion(); renderLastSession();
+  renderSuggestion(); renderLastSession(); renderRouteCard();
   $("#focusMini").innerHTML = `<div class="row between"><div><h3>Focus techniek</h3><p class="cap">Waar je het meeste wint, en of het lukte in je laatste run (${esc(D.overview.tech_focus?.last_run?.name||"")})</p></div><button class="btn" id="focusMore">Meer</button></div>${focusHtml(D.overview.tech_focus, true)}`;
   $("#focusMore").onclick = () => showTab("techniek");
 
@@ -1122,6 +1272,7 @@ function showTab(t){
   $$(".view").forEach(v => v.classList.toggle("on", v.dataset.view===t));
   store.set("tab", t);
   Object.values(charts).forEach(c => c.resize());
+  if (RT.map) setTimeout(() => RT.map.invalidateSize(), 60);
   window.scrollTo({top:0});
 }
 $("#tabs").innerHTML = Object.keys(TAB_NAMES).map(t=>`<button class="tab" data-t="${t}">${svgI(ICONS[t])}<span>${TAB_NAMES[t]}</span></button>`).join("");

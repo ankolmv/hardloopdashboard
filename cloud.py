@@ -146,7 +146,7 @@ def build(out):
     put("runs.enc", {a["id"]: M.run_detail(a["id"]) for a in base["activities"] if a["date"] >= cutoff})
     # GitHub-token voor de knoppen: versleuteld met het dashboardwachtwoord, zodat elk apparaat
     # na het inloggen automatisch acties kan starten (alleen 'Actions'-rechten op deze repository)
-    put("cfg.enc", {"actions_token": os.environ.get("ACTIONS_TOKEN") or None})
+    put("cfg.enc", {"actions_token": os.environ.get("ACTIONS_TOKEN") or None, "ors_key": os.environ.get("ORS_KEY") or None})
 
     meta = {"build": build_id, "built_at": dt.datetime.now().isoformat(timespec="seconds"), "salt": base64.b64encode(salt).decode(),
             "iterations": PBKDF2_ITER, "periods": PERIODS, "km_steps": list(KM_STEPS),

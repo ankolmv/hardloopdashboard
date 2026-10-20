@@ -73,6 +73,7 @@ jobs:
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           ACTIONS_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
+          ORS_KEY: ${{ secrets.ORS_KEY }}
         run: python cloud.py build site
 
       - name: Cache versleuteld opslaan
