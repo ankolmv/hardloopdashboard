@@ -432,6 +432,29 @@ def daily_recovery(wellness, garmin_daily):
     return out
 
 
+def heat_cells(runs, center, radius_km=10, cell=0.0003):
+    """Eigen warmtekaart: per cel (~30 m) het aantal runs dat erdoor kwam, binnen radius_km van center."""
+    if not center:
+        return []
+    counts = {}
+    for r in runs:
+        s = store.streams(r["id"])
+        lat, lng = s.get("lat") or [], s.get("lng") or []
+        seen = set()
+        for i in range(0, min(len(lat), len(lng)), 3):
+            la, lo = lat[i], lng[i]
+            if la is None or lo is None:
+                continue
+            seen.add((round(la / cell), round(lo / cell)))
+        for k in seen:
+            counts[k] = counts.get(k, 0) + 1
+    lat0, lon0 = center
+    dlat = radius_km / 111.0
+    dlon = radius_km / (111.0 * math.cos(math.radians(lat0)))
+    return [[round(k[0] * cell, 5), round(k[1] * cell, 5), n] for k, n in counts.items()
+            if abs(k[0] * cell - lat0) <= dlat and abs(k[1] * cell - lon0) <= dlon]
+
+
 def build(data):
     """Volledige analyse vanuit de cache."""
     athlete, acts, wellness = data["athlete"], data["activities"], data["wellness"]

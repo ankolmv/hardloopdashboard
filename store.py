@@ -11,6 +11,7 @@ import os
 import threading
 
 import garmin_client
+import strava_client
 from intervals_client import IntervalsClient
 
 import paths
@@ -64,11 +65,34 @@ def sync_intervals():
         name = os.path.join("streams", f"{a['id']}.json")
         if os.path.exists(_path(name)):
             continue
-        raw = c.activity_streams(a["id"])
-        _write(name, {s["type"]: s.get("data") for s in raw})
+        _write(name, _streams_dict(c.activity_streams(a["id"])))
         new += 1
+    # Eenmalig: GPS (lat/lng) aanvullen voor runs die al in de cache staan zonder GPS
+    gps = 0
+    for a in activities:
+        if not (has_data(a) and is_run(a)):
+            continue
+        name = os.path.join("streams", f"{a['id']}.json")
+        s = _read(name, None)
+        if s is None or "lat" in s:
+            continue
+        extra = _streams_dict(c.activity_streams(a["id"], "latlng"))
+        s.update({k: v for k, v in extra.items() if k in ("lat", "lng")} or {"lat": None, "lng": None})
+        _write(name, s)
+        gps += 1
     return {"activities": len(activities), "with_data": sum(1 for a in activities if has_data(a)),
-            "new_streams": new}
+            "new_streams": new, "gps_backfill": gps}
+
+
+def _streams_dict(raw):
+    """intervals.icu-streams naar {type: data}; latlng wordt gesplitst in lat (data) en lng (data2)."""
+    out = {}
+    for s in raw or []:
+        if s.get("type") == "latlng":
+            out["lat"], out["lng"] = s.get("data"), s.get("data2")
+        else:
+            out[s["type"]] = s.get("data")
+    return out
 
 
 def sync_garmin():
@@ -134,7 +158,7 @@ def fill_missing_runs(g, garmin_acts):
         if "run" not in (ga.get("type") or "") or _has_match(ga.get("start"), intervals_runs):
             continue
         name = os.path.join("garmin", "runs", f"{ga['garmin_id']}.json")
-        if os.path.exists(_path(name)):
+        if os.path.exists(_path(name)) and "lat" in _read(os.path.join("streams", f"g{ga['garmin_id']}.json"), {}):
             continue
         act, streams = garmin_client.fetch_run(g, ga["garmin_id"], ctx)
         _write(os.path.join("streams", f"{act['id']}.json"), streams)
@@ -203,6 +227,45 @@ def write_garmin_wellness():
     _write("wellness.json", out)
 
 
+def _home():
+    p = os.path.join(paths.BASE, "settings.json")
+    if os.path.exists(p):
+        with open(p, encoding="utf-8") as f:
+            return json.load(f).get("home")
+    return None
+
+
+def route_center():
+    """Startpunt uit de instellingen, anders het begin van de laatste run met GPS."""
+    home = _home()
+    if home:
+        return home
+    for a in sorted(_read("activities.json", []), key=lambda a: a.get("start_date_local") or "", reverse=True):
+        s = streams(a["id"]) if has_data(a) and is_run(a) else {}
+        if s.get("lat") and s.get("lng") and s["lat"][0] is not None:
+            return [s["lat"][0], s["lng"][0]]
+    return None
+
+
+def sync_strava():
+    """Populaire hardloopsegmenten rond het startpunt; eens per 7 dagen of als het startpunt verschuift."""
+    if not strava_client.available():
+        return {"strava": "niet gekoppeld"}
+    center = route_center()
+    if not center:
+        return {"strava": "geen startpunt"}
+    cur = _read(os.path.join("strava", "segments.json"), {}) or {}
+    old_c = cur.get("center") or [0, 0]
+    moved = abs(old_c[0] - center[0]) > 0.01 or abs(old_c[1] - center[1]) > 0.015
+    age = dt.datetime.now() - dt.datetime.fromisoformat(cur["fetched_at"]) if cur.get("fetched_at") else None
+    if not moved and age is not None and age < dt.timedelta(days=7):
+        return {"strava": "ok (cache)", "strava_segments": len(cur.get("segments") or [])}
+    segs = strava_client.explore_around(center)
+    _write(os.path.join("strava", "segments.json"), {"center": center, "segments": segs,
+                                                     "fetched_at": dt.datetime.now().isoformat(timespec="seconds")})
+    return {"strava": "ok", "strava_segments": len(segs)}
+
+
 def sync():
     with _lock:
         if intervals_configured():
@@ -215,6 +278,10 @@ def sync():
             meta.update(sync_garmin())
         except Exception as e:  # noqa: BLE001  – Garmin mag de sync nooit breken
             meta.update({"garmin": f"fout: {e}"})
+        try:
+            meta.update(sync_strava())
+        except Exception as e:  # noqa: BLE001  – Strava mag de sync nooit breken
+            meta.update({"strava": f"fout: {e}"})
         meta["synced_at"] = dt.datetime.now().isoformat(timespec="seconds")
         _write("meta.json", meta)
         return meta
@@ -245,6 +312,8 @@ def load():
         "garmin_activities": _read(os.path.join("garmin", "activities.json"), []),
         "garmin_linked": garmin_client.available(),
         "garmin_extra": _read_dir(os.path.join("garmin", "extra")),
+        "strava_segments": (_read(os.path.join("strava", "segments.json"), {}) or {}).get("segments") or [],
+        "strava_linked": strava_client.available(),
     }
 
 

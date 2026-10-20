@@ -714,7 +714,7 @@ function focusHtml(F, compact){
 }
 
 // ===================================================================== route (OpenRouteService + Open-Meteo)
-const RT = {mode: store.get("route_mode", "loop"), cands: [], idx: 0, seedBase: 1, map: null, layers: null, wind: null, start: null, km: null, busy: false};
+const RT = {showPop: !!store.get("route_pop", "1"), mode: store.get("route_mode", "loop"), cands: [], idx: 0, seedBase: 1, map: null, layers: null, wind: null, start: null, km: null, busy: false};
 const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
 function hav(a, b){ const R = 6371000, dLa = toRad(b[0]-a[0]), dLo = toRad(b[1]-a[1]);
   const x = Math.sin(dLa/2)**2 + Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
@@ -756,34 +756,121 @@ const COMPASS = ["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW",
 const beaufort = kmh => [1,6,12,20,29,39,50,62,75,89,103,118].findIndex(x => kmh < x) === -1 ? 12 : [1,6,12,20,29,39,50,62,75,89,103,118].findIndex(x => kmh < x);
 function parseLL(v){ const m = String(v||"").replace(/[()]/g,"").split(/[,;\s]+/).filter(Boolean).map(Number); return m.length === 2 && m.every(isFinite) ? m : null; }
 
-async function makeLoops(start, L, windFrom){
-  const seeds = [...Array(6).keys()].map(i => RT.seedBase + i);
-  // ORS maakt rondjes gemiddeld wat korter dan gevraagd: vraag 6% langer aan. Max 6 verzoeken (limiet 40/min)
-  // Na elkaar i.p.v. tegelijk: de gratis ORS-sleutel weigert te veel gelijktijdige verzoeken
-  const res = [];
-  for (const seed of seeds.slice(0, 5)){
-    try { res.push({status:"fulfilled", value: await ors({coordinates:[[start[1], start[0]]], options:{round_trip:{length:Math.round(L * 1.06), points:4, seed}}})}); }
-    catch(e){ res.push({status:"rejected", reason:e}); if (/te veel|reageert niet/i.test(e.message)) break; }
+// ---------- populaire plekken (eigen warmtekaart + Strava-segmenten)
+const CELL = 0.0003;
+const cellKey = (la, lo) => `${Math.round(la / CELL)},${Math.round(lo / CELL)}`;
+let POP = null;
+function popularIndex(){
+  if (POP) return POP;
+  const set = new Set(), anchors = [];
+  for (const [la, lo, n] of D.route?.heat || []){
+    if (n >= 2) set.add(cellKey(la, lo));
+    if (n >= 4) anchors.push({ll:[la, lo], w: Math.min(n, 12) / 12});
   }
-  const ok = res.filter(r => r.status === "fulfilled").map(r => r.value);
-  if (!ok.length) throw (res[0].reason || new Error("Geen routes gevonden."));
-  let c = [];
-  for (const coords of ok){ for (const dir of [coords, [...coords].reverse()]){ const w = windScore(dir, windFrom); c.push({coords:dir, ...w}); } }
-  const near = c.filter(x => Math.abs(x.len - L) / L <= 0.12);
-  c = (near.length ? near : c.sort((a,b)=>Math.abs(a.len-L)-Math.abs(b.len-L)).slice(0,4));
-  // Rangschikken op wind én afstand: elke 1% afwijking kost 0,03 windpunten
-  const rank = x => x.score - 3 * Math.abs(x.len - L) / L;
-  return c.sort((a,b) => rank(b) - rank(a));
+  for (const sg of D.route?.segments || []){
+    const pts = sg.pts || [], w = Math.max(0.4, 1.4 - 0.1 * (sg.rank || 0));
+    for (let i = 1; i < pts.length; i++){  // verdichten tot ±30 m
+      const d = hav(pts[i-1], pts[i]), n = Math.max(1, Math.round(d / 30));
+      for (let k = 0; k < n; k++){ const f = k / n; set.add(cellKey(pts[i-1][0] + (pts[i][0]-pts[i-1][0])*f, pts[i-1][1] + (pts[i][1]-pts[i-1][1])*f)); }
+    }
+    if (pts.length){ anchors.push({ll:pts[0], w}); anchors.push({ll:pts[Math.floor(pts.length/2)], w}); anchors.push({ll:pts[pts.length-1], w}); }
+  }
+  return POP = {set, anchors};
+}
+// Bemonster een route elke `step` meter: [[lat, lon, afstand], ...]
+function sampleRoute(c, step = 20){
+  const out = [[c[0][0], c[0][1], 0]]; let acc = 0, next = step;
+  for (let i = 1; i < c.length; i++){ const d = hav(c[i-1], c[i]); if (!d) continue;
+    while (acc + d >= next){ const f = (next - acc) / d; out.push([c[i-1][0] + (c[i][0]-c[i-1][0])*f, c[i-1][1] + (c[i][1]-c[i-1][1])*f, next]); next += step; }
+    acc += d; }
+  return out;
+}
+// Aandeel van de route dat over een eerder stuk terugloopt (heen-en-terug, doodlopende uitstapjes)
+function overlapRatio(c){
+  const smp = sampleRoute(c, 20), grid = new Map(), g = 0.00015; let dup = 0;
+  for (const [la, lo, s] of smp){
+    const gx = Math.round(la / g), gy = Math.round(lo / g); let hit = false;
+    for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++){
+      for (const q of grid.get(`${gx+dx},${gy+dy}`) || []) if (s - q[2] > 80 && hav([la, lo], q) <= 15){ hit = true; break; } }
+    if (hit) dup++;
+    const k = `${gx},${gy}`; if (!grid.has(k)) grid.set(k, []); grid.get(k).push([la, lo, s]);
+  }
+  return smp.length ? dup / smp.length : 0;
+}
+// Laatste stuk dat over het begin terugloopt eraf knippen; eindpunt mag tot 200 m voor de start liggen
+function trimTail(c){
+  const start = c[0], L = routeLength(c); let acc = 0; const head = [];
+  for (let i = 0; i < c.length && acc < 600; i++){ head.push(c[i]); if (i) acc += hav(c[i-1], c[i]); }
+  const nearHead = p => head.some(h => hav(h, p) <= 20);
+  let j = c.length - 1;
+  while (j > 1 && nearHead(c[j - 1]) && hav(c[j - 1], start) <= 200) j--;
+  if (j < c.length - 1 && L - routeLength(c.slice(0, j + 1)) > 30){
+    const t = c.slice(0, j + 1); return {coords:t, trimmed: Math.round(hav(t[t.length-1], start))};
+  }
+  return {coords:c, trimmed:0};
+}
+function popularShare(c){
+  const P = popularIndex(); if (!P.set.size) return null; const smp = sampleRoute(c, 25); let hit = 0;
+  for (const [la, lo] of smp){ const gx = Math.round(la / CELL), gy = Math.round(lo / CELL); let ok = false;
+    for (let dx = -1; dx <= 1 && !ok; dx++) for (let dy = -1; dy <= 1 && !ok; dy++) if (P.set.has(`${gx+dx},${gy+dy}`)) ok = true;
+    if (ok) hit++; }
+  return hit / smp.length;
+}
+// Trek een tussenpunt naar de populairste plek in de buurt
+function snapToPopular(p, radius){
+  let best = null, bestScore = 0;
+  for (const a of popularIndex().anchors){ const d = hav(p, a.ll); if (d > radius) continue;
+    const sc = a.w * (1 - d / radius * 0.6); if (sc > bestScore){ bestScore = sc; best = a.ll; } }
+  return best || p;
+}
+const ORS_PREFS = {profile_params:{weightings:{green:1, quiet:1}}};  // voorkeur voor groen en rustige paden
+async function routeVia(points){ return ors({coordinates: points.map(p => [p[1], p[0]]), options: ORS_PREFS}); }
+
+async function makeLoops(start, L, windFrom){
+  // Cirkel door de start met het middelpunt in de wind: de eerste helft gaat vanzelf tegen de wind in
+  const variants = [[1,3,0],[-1,3,0],[1,4,0],[-1,4,0],[1,3,20],[-1,3,-20]].slice(0, 6)
+    .map(([dir, n, rot]) => ({dir, n, rot: rot + (RT.seedBase - 1) * 11}));
+  const out = []; let factor = 1.3, lastErr = null;
+  for (const v of variants){
+    let r = L / factor / (2 * Math.PI), best = null;
+    for (let attempt = 0; attempt < 2; attempt++){
+      const center = project(start, windFrom + v.rot, r), a0 = bearing(center, start), wps = [];
+      for (let k = 1; k <= v.n; k++) wps.push(snapToPopular(project(center, a0 + v.dir * k * 360 / (v.n + 1), r), r * 0.3));
+      let coords;
+      try { coords = await routeVia([start, ...wps, start]); }
+      catch(e){ lastErr = e; if (/te veel|reageert niet|sleutel/i.test(e.message)) return finish(); break; }
+      const tr = trimTail(coords), len = routeLength(tr.coords);
+      best = {coords: tr.coords, trimmed: tr.trimmed, ...windScore(tr.coords, windFrom), len,
+              overlap: overlapRatio(tr.coords), popular: popularShare(tr.coords)};
+      factor = Math.max(1.05, Math.min(1.8, len / (2 * Math.PI * r)));  // werkelijke omwegfactor bij deze plek
+      if (Math.abs(len - L) / L <= 0.10) break;
+      r *= L / len;  // straal bijschalen en één keer opnieuw
+    }
+    if (best) out.push(best);
+  }
+  return finish();
+  function finish(){
+    if (!out.length) throw (lastErr || new Error("Geen rondje gevonden."));
+    const rank = x => x.score + 0.8 * (x.popular ?? 0) - 3 * Math.abs(x.len - L) / L - 5 * Math.max(0, x.overlap - 0.04);
+    const good = out.filter(x => Math.abs(x.len - L) / L <= 0.10 && x.overlap <= 0.04);
+    // Bijna gelijke rondjes (zelfde lengte en windverdeling) maar één keer tonen
+    const seen = new Set();
+    const list = (good.length ? good : out).sort((a, b) => rank(b) - rank(a))
+      .filter(x => { const k = `${Math.round(x.len / 40)}|${Math.round(x.head1 * 20)}|${Math.round((x.popular ?? 0) * 20)}`; if (seen.has(k)) return false; seen.add(k); return true; });
+    list.forEach(x => x.compromise = !good.length);
+    return list;
+  }
 }
 async function makeOutBack(start, L, windFrom, offset){
   const brg = (windFrom + offset + 360) % 360; let straight = 0.8 * L / 2, path = null;
   for (let i = 0; i < 3; i++){
-    path = await ors({coordinates:[[start[1], start[0]], [project(start, brg, straight)[1], project(start, brg, straight)[0]]]});
+    const turn = snapToPopular(project(start, brg, straight), straight * 0.2);
+    path = await routeVia([start, turn]);
     const d = routeLength(path); if (Math.abs(d - L/2) / (L/2) <= 0.05) break;
     straight *= (L/2) / d;
   }
   const coords = [...path, ...[...path].reverse().slice(1)];
-  return {coords, ...windScore(coords, windFrom)};
+  return {coords, trimmed: 0, overlap: null, popular: popularShare(coords), len: routeLength(coords), ...windScore(coords, windFrom)};
 }
 async function buildRoute(newSet){
   if (RT.busy) return; RT.busy = true; const msg = $("#routeMsg"); msg.textContent = "Route berekenen…";
@@ -818,7 +905,13 @@ function drawRoute(){
   L.polyline(second.length ? [first[first.length-1], ...second] : [], {color:css("--blue"), weight:5, opacity:.85}).addTo(RT.layers);
   L.polyline(first, {color:css("--accent"), weight:5, opacity:.9}).addTo(RT.layers);
   for (const [ll, k] of kms) L.marker(ll, {icon:L.divIcon({className:"kmlabel", html:`${k}`, iconSize:null})}).addTo(RT.layers);
-  L.circleMarker(r.coords[0], {radius:8, color:"#fff", weight:3, fillColor:css("--green"), fillOpacity:1}).bindTooltip("Start / finish").addTo(RT.layers);
+  L.circleMarker(r.coords[0], {radius:8, color:"#fff", weight:3, fillColor:css("--green"), fillOpacity:1}).bindTooltip(r.trimmed ? "Start" : "Start / finish").addTo(RT.layers);
+  if (r.trimmed) L.circleMarker(r.coords[r.coords.length-1], {radius:7, color:"#fff", weight:3, fillColor:css("--red"), fillOpacity:1}).bindTooltip(`Finish (${r.trimmed} m voor de start)`).addTo(RT.layers);
+  if (RT.showPop){
+    const cv = L.canvas({padding:0.2});
+    for (const [la, lo, n] of D.route?.heat || []) if (n >= 2) L.circleMarker([la, lo], {renderer:cv, radius:2, stroke:false, fillColor:css("--purple"), fillOpacity:Math.min(.55, .12 + n * .04)}).addTo(RT.layers);
+    for (const sg of D.route?.segments || []) L.polyline(sg.pts, {color:"#555", weight:2, opacity:.45, dashArray:"4 4"}).bindTooltip(`Strava: ${esc(sg.name)}`).addTo(RT.layers);
+  }
   RT.map.fitBounds(L.polyline(r.coords).getBounds(), {padding:[24,24]});
   setTimeout(() => RT.map.invalidateSize(), 50);
   const w = RT.wind, pct = v => Math.round(Math.max(0, v) * 100);
@@ -828,9 +921,17 @@ function drawRoute(){
       <div class="windbox"><svg viewBox="0 0 24 24"><g transform="rotate(${blowTo} 12 12)"><path d="M12 3v16M6 13l6 6 6-6" fill="none" stroke="${css("--blue")}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
         <div><div class="k">Wind${w.time?` (${w.time})`:""}</div><div class="v tnum">${fmt(w.speed,0)} km/u</div><div class="muted" style="font-size:11.5px">uit ${COMPASS[Math.round((w.from??0)/22.5)%16]} · Bft ${beaufort(w.speed??0)}${w.gusts?` · stoten ${fmt(w.gusts,0)}`:""}</div></div></div>
       <div><div class="k">1e helft tegenwind</div><div class="v tnum">${pct(r.head1)}%</div></div>
-      <div><div class="k">2e helft wind mee</div><div class="v tnum">${pct(-r.head2)}%</div></div></div>
+      <div><div class="k">2e helft wind mee</div><div class="v tnum">${pct(-r.head2)}%</div></div>
+      ${r.popular!=null?`<div><div class="k">Populaire paden</div><div class="v tnum">${pct(r.popular)}%</div></div>`:""}
+      ${r.overlap!=null?`<div><div class="k">Dubbel gelopen</div><div class="v tnum">${pct(r.overlap)}%</div></div>`:""}</div>
     <p class="cap" style="margin:10px 0 0"><span style="color:${css("--accent")};font-weight:700">━</span> eerste helft (tegen de wind) · <span style="color:${css("--blue")};font-weight:700">━</span> tweede helft (wind mee) · getallen = km.
-      ${weak ? "Er staat weinig wind, dus de richting maakt nauwelijks uit." : ""} Route ${RT.idx+1}${RT.mode==="loop"?` van ${RT.cands.length}`:""}.</p>`;
+      ${weak ? "Er staat weinig wind, dus de richting maakt nauwelijks uit." : ""} Route ${RT.idx+1}${RT.mode==="loop"?` van ${RT.cands.length}`:""}.
+      ${r.trimmed ? `Eindigt ${r.trimmed} m voor de start (zonder stuk terug over het begin).` : ""}
+      ${r.compromise ? `<b>Let op:</b> geen rondje gevonden dat helemaal aan de eisen voldoet; dit is het beste compromis.` : ""}
+      Voorkeur voor groen en rustige paden${(D.route?.heat||[]).length?", je eigen looproutes":""}${(D.route?.segments||[]).length?" en populaire Strava-segmenten":""}.
+      ${(D.route?.segments||[]).length ? `<span style="color:#fc4c02;font-weight:700">Powered by Strava</span>` : ""}</p>
+    <label class="muted" style="font-size:12.5px;display:inline-flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="rtPop" ${RT.showPop?"checked":""}> Populaire paden tonen op de kaart</label>`;
+  $("#rtPop").onchange = e => { RT.showPop = e.target.checked; store.set("route_pop", RT.showPop ? "1" : ""); drawRoute(); };
 }
 function renderRouteCard(){
   const R = D.route || {};
@@ -845,6 +946,7 @@ function renderRouteCard(){
       <button class="btn primary" id="rtGo">Maak route</button><button class="btn" id="rtNext">Andere route</button>
       <button class="btn" id="rtSave" title="Bewaar als standaard startpunt (alle apparaten)">Startpunt opslaan</button></div>
     <div id="routeMsg" class="muted" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
+    ${R.strava_linked ? "" : `<p class="cap" style="margin:0">Tip: koppel Strava voor populaire hardloopsegmenten (<code>python strava_login.py</code>, daarna <code>set_strava_secrets.ps1</code>).</p>`}
     <div id="routeInfo"></div><div class="routemap" id="routeMap"></div>`;
   RT.map = null; RT.layers = null;
   $$("#rtMode button").forEach(b => { b.classList.toggle("on", b.dataset.m === RT.mode);
@@ -899,7 +1001,7 @@ function renderOverview(){
     $("#hero").innerHTML = `<div class="hero-grid"><div></div><div><div class="eyebrow">Jouw doel</div><div class="goal">Stel een doel in</div><p style="opacity:.9;margin:0">Kies een afstand en een doeltijd. Het dashboard laat zien hoe ver je bent en wanneer je het waarschijnlijk haalt.</p></div>${goalForm(g||{})}</div>`;
   }
   $("#goalSave").onclick = saveGoal;
-  renderSuggestion(); renderLastSession(); renderRouteCard();
+  POP = null; renderSuggestion(); renderLastSession(); renderRouteCard();
   $("#focusMini").innerHTML = `<div class="row between"><div><h3>Focus techniek</h3><p class="cap">Waar je het meeste wint, en of het lukte in je laatste run (${esc(D.overview.tech_focus?.last_run?.name||"")})</p></div><button class="btn" id="focusMore">Meer</button></div>${focusHtml(D.overview.tech_focus, true)}`;
   $("#focusMore").onclick = () => showTab("techniek");
 

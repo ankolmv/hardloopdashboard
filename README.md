@@ -41,6 +41,9 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 Op Overzicht maakt het dashboard een route vanaf je startpunt: een rondje of heen-en-terug, met de eerste helft
 tegen de wind in (wind via Open-Meteo, route via OpenRouteService). Eenmalig: maak een gratis sleutel op
 openrouteservice.org en voer `set_ors_key.ps1` uit (zet hem in `.env` en als secret `ORS_KEY`).
+Rondjes worden zelf opgebouwd (cirkel met de wind, tussenpunten naar populaire plekken), zonder heen-en-terug-stukken
+(max 4% dubbel), eindigen eventueel tot 200 m voor de start, en hebben voorkeur voor groen/rustig, je eigen
+looproutes (GPS) en populaire Strava-segmenten (optioneel: `python strava_login.py` + `set_strava_secrets.ps1`).
 
 ## Garmin-login: pc en cloud apart
 De cloud ververst zijn Garmin-token bij elke run; daardoor wordt een gedeelde kopie ongeldig. Gebruik daarom op de

@@ -85,7 +85,7 @@ class IntervalsClient:
             params["category"] = category
         return self._request("GET", f"/athlete/{self.athlete_id}/events", params) or []
 
-    def activity_streams(self, activity_id, types="time,distance,heartrate,velocity_smooth,altitude,watts,cadence"):
+    def activity_streams(self, activity_id, types="time,distance,heartrate,velocity_smooth,altitude,watts,cadence,latlng"):
         """Lijst van {"type": ..., "data": [...]} per stream."""
         return self._request("GET", f"/activity/{activity_id}/streams.json", {"types": types}) or []
 

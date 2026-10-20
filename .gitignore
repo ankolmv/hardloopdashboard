@@ -1,6 +1,7 @@
 # Persoonlijk: nooit in de (publieke) repository
 .env
 .garmin_tokens/
+.strava_tokens/
 data/
 profiles/
 goal.json

@@ -28,7 +28,7 @@ import paths
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.path.join(HERE, "state", "state.enc")
-STATE_ITEMS = ["data", ".garmin_tokens", "goal.json", "settings.json"]
+STATE_ITEMS = ["data", ".garmin_tokens", ".strava_tokens", "goal.json", "settings.json"]
 PBKDF2_ITER = 200_000
 KM_STEPS = range(0, 101, 5)
 PERIODS = (8, 12, 26, 52)
@@ -72,6 +72,12 @@ def restore():
     with open(paths.ENV, "w", encoding="utf-8") as f:
         f.write(f"INTERVALS_ATHLETE_ID={os.environ.get('INTERVALS_ATHLETE_ID', '')}\n")
         f.write(f"INTERVALS_API_KEY={os.environ.get('INTERVALS_API_KEY', '')}\n")
+    st = os.path.join(paths.BASE, ".strava_tokens", "tokens.json")
+    if not os.path.exists(st) and os.environ.get("STRAVA_REFRESH_TOKEN"):
+        os.makedirs(os.path.dirname(st), exist_ok=True)
+        with open(st, "w", encoding="utf-8") as f:
+            json.dump({"client_id": os.environ.get("STRAVA_CLIENT_ID"), "client_secret": os.environ.get("STRAVA_CLIENT_SECRET"),
+                       "refresh_token": os.environ["STRAVA_REFRESH_TOKEN"]}, f)
     tok = os.path.join(paths.TOKENS, "garmin_tokens.json")
     # Ververste tokens uit de cache gaan voor; het secret is alleen de start
     if not os.path.exists(tok) and os.environ.get("GARMIN_TOKENS"):

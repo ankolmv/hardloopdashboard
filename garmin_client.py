@@ -194,7 +194,7 @@ def fetch_snapshot(g, today):
 
 STREAM_KEYS = {"sumDuration": "time", "sumDistance": "distance", "directHeartRate": "heartrate",
                "directSpeed": "velocity_smooth", "directRunCadence": "cadence", "directPower": "watts",
-               "directElevation": "altitude"}
+               "directElevation": "altitude", "directLatitude": "lat", "directLongitude": "lng"}
 
 
 def fetch_run(g, garmin_id, ctx):
