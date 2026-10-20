@@ -882,12 +882,15 @@ function renderRecovery(){
   const vs = (v, avg, unit="", inv=false, dec=0) => v==null ? "" : avg==null ? "" : (() => { const df = v-avg; const good = inv ? df<=0 : df>=0; return `<span class="delta ${good?"up":"down"}">${df>=0?"+":""}${fmt(df,dec)}${unit}</span> t.o.v. 28 d`; })();
   $("#recTiles").innerHTML = [
     tile("Training Readiness", t.readiness!=null?fmt(t.readiness,0)+"<small>/100</small>":"–",
-      [t.readiness_level?esc(prettify(t.readiness_level)):(D.garmin_linked?"":"koppel Garmin"), t.readiness_time?`gemeten ${t.readiness_time}`:""].filter(Boolean).join(" · "),
+      [t.readiness_level?esc(prettify(t.readiness_level)):(D.garmin_linked?"":"koppel Garmin"),
+       t.readiness_time?`<span title="Laatste waarde die Garmin Connect heeft opgeslagen. Je horloge rekent live; Garmin slaat readiness op bij wakker worden en na trainingen.">laatst opgeslagen ${t.readiness_time}</span>`:""].filter(Boolean).join(" · "),
       "--green", d.map(x=>x.readiness)),
     tile("HRV", t.hrv!=null?fmt(t.hrv,0)+"<small>ms</small>":"–", t.hrv_status?esc(prettify(t.hrv_status)):vs(t.hrv, a.hrv, " ms"), "--pink", d.map(x=>x.hrv)),
     tile("Rusthartslag", t.rhr!=null?fmt(t.rhr,0)+"<small>bpm</small>":"–", vs(t.rhr, a.rhr, "", true), "--red", d.map(x=>x.rhr)),
     tile("Slaap", t.sleep_h!=null?hms(t.sleep_h*3600).slice(0,-3)+"<small>u</small>":"–", t.sleep_score!=null?`score ${fmt(t.sleep_score,0)}`:"", "--purple", d.map(x=>x.sleep_h)),
-    tile("Body Battery", t.bb_high!=null?fmt(t.bb_high,0):"–", t.bb_wake!=null?`bij wakker worden ${t.bb_wake}`:(D.garmin_linked?"":"koppel Garmin"), "--blue", d.map(x=>x.bb_high)),
+    tile("Body Battery", (t.bb_now ?? t.bb_high)!=null?fmt(t.bb_now ?? t.bb_high,0):"–",
+      t.bb_now!=null ? [t.bb_now_time?`om ${t.bb_now_time}`:"nu", t.bb_high!=null?`hoogste ${t.bb_high}`:""].filter(Boolean).join(" · ")
+        : (t.bb_wake!=null?`bij wakker worden ${t.bb_wake}`:(D.garmin_linked?"":"koppel Garmin")), "--blue", d.map(x=>x.bb_high)),
     tile("Stress", t.stress_avg!=null?fmt(t.stress_avg,0):"–", t.stress_avg!=null?"gemiddeld (0–100)":(D.garmin_linked?"":"koppel Garmin"), "--orange", d.map(x=>x.stress_avg)),
   ].join("");
   const lastBase = [...d].reverse().find(x => x.hrv_base_lo != null && x.hrv_base_hi != null);

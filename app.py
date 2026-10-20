@@ -385,7 +385,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
 
     # ---------------- Herstel
     rec_keys = ("date", "hrv", "hrv_base_lo", "hrv_base_hi", "hrv_status", "rhr", "sleep_h", "sleep_score", "sleep_deep_h",
-                "sleep_rem_h", "sleep_light_h", "sleep_awake_h", "readiness", "readiness_level", "readiness_time", "bb_high", "bb_low",
+                "sleep_rem_h", "sleep_light_h", "sleep_awake_h", "readiness", "readiness_level", "readiness_time", "bb_now", "bb_now_time", "bb_high", "bb_low",
                 "bb_wake", "stress_avg", "steps", "respiration", "recovery_time_h")
     recovery = {
         "days": sel(days, rec_keys),

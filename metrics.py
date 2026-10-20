@@ -407,7 +407,7 @@ def daily_recovery(wellness, garmin_daily):
                    "weight": w.get("weight")}
     for d, g in garmin_daily.items():
         row = days.setdefault(d, {"date": d})
-        for k in ("readiness", "readiness_level", "readiness_time", "readiness_morning", "bb_high", "bb_low", "bb_charged", "bb_wake", "stress_avg",
+        for k in ("readiness", "readiness_level", "readiness_time", "readiness_morning", "bb_now", "bb_now_time", "bb_high", "bb_low", "bb_charged", "bb_wake", "stress_avg",
                   "hrv_night", "hrv_week", "hrv_status", "hrv_base_lo", "hrv_base_hi", "training_status",
                   "acwr", "load_acute", "load_chronic", "recovery_time_h", "respiration", "intensity_min",
                   "load_focus", "load_aerobic_low", "load_aerobic_high", "load_anaerobic"):

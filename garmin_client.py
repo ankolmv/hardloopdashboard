@@ -80,6 +80,12 @@ def fetch_day(g, day):
         out["bb_drained"] = bb.get("drained")
         out["bb_high"] = max(vals) if vals else None
         out["bb_low"] = min(vals) if vals else None
+        # Meest recente meting (niet de hoogste van de dag)
+        pts = [v for v in (bb.get("bodyBatteryValuesArray") or []) if isinstance(v, list) and len(v) > 1 and v[1] is not None]
+        if pts:
+            last = max(pts, key=lambda v: v[0])
+            out["bb_now"] = last[1]
+            out["bb_now_time"] = dt.datetime.fromtimestamp(last[0] / 1000).strftime("%H:%M")
 
     us = _try(g.get_user_summary, ds)
     if isinstance(us, dict):
@@ -87,6 +93,8 @@ def fetch_day(g, day):
         out["stress_rest_s"] = us.get("restStressDuration")
         out["stress_high_s"] = us.get("highStressDuration")
         out["bb_wake"] = us.get("bodyBatteryAtWakeTime")
+        if us.get("bodyBatteryMostRecentValue") is not None:
+            out["bb_now"] = us["bodyBatteryMostRecentValue"]
         out["steps"] = us.get("totalSteps")
         out["intensity_min"] = (us.get("moderateIntensityMinutes") or 0) + 2 * (us.get("vigorousIntensityMinutes") or 0)
         out["resting_hr"] = us.get("restingHeartRate")
