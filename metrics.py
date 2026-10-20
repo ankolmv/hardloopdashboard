@@ -235,7 +235,7 @@ def analyze_run(a, ctx):
         "elev": round(a["total_elevation_gain"]) if a.get("total_elevation_gain") else 0,
         "zones": (hr_zone_seconds(hr, time, ctx["hr_floors"]) if ctx.get("hr_floors") and hr and time
                   else a.get("icu_hr_zone_times")),
-        "pace_zones": a.get("gap_zone_times") or a.get("pace_zone_times"),
+        "pace_zones": None,  # tempoverdeling wordt in app.py met de model-drempel berekend (niet die van intervals.icu)
         "polarization": a.get("polarization_index"), "rpe": a.get("icu_rpe"), "feel": a.get("feel"),
         "trimp": round(a["trimp"]) if a.get("trimp") else None, "intensity": a.get("icu_intensity"),
         "hrr60": (a.get("icu_hrr") or {}).get("hrr"), "calories": a.get("calories"),

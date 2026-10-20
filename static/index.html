@@ -352,7 +352,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <div class="card"><h3>Trainingstempo's (Daniels)</h3><p class="cap" id="dCap"></p><div class="tablewrap"><table id="dTable"></table></div></div>
     </div>
     <div class="grid g2">
-      <div class="card"><div class="row between"><div><h3>Tempozones</h3><p class="cap" id="pzCap"></p></div><div class="seg" id="pzSeg"><button data-s="garmin" class="on">Garmin</button><button data-s="model">Model</button></div></div><div class="tablewrap"><table id="pzTable"></table></div></div>
+      <div class="card"><div class="row between"><div><h3>Tempozones</h3><p class="cap" id="pzCap"></p></div><div class="seg" id="pzSeg"><button data-s="model" class="on">Model</button><button data-s="garmin">Garmin</button></div></div><div class="tablewrap"><table id="pzTable"></table></div></div>
       <div class="card"><div class="row between"><div><h3>Hartslagzones</h3></div><div class="seg" id="hzSeg"><button data-s="model">Model</button><button data-s="garmin">Garmin</button></div></div><p class="cap" id="hzCap"></p><div class="tablewrap"><table id="hzTable"></table></div></div>
     </div>
   </section>
@@ -1271,7 +1271,7 @@ function renderTechnique(){
 }
 
 // --------------------------------------------------------------------- zones
-let pzSrc = "garmin";
+let pzSrc = store.get("pz_src", "model");  // standaard de tempozones van het model
 const ZCOL = ["--faint","--blue","--green","--orange","--red","--pink","--purple"];
 function renderZones(){
   const Z = D.zones, S = Z.sources, ss = Z.sources_s;
@@ -1310,7 +1310,7 @@ function renderZones(){
   const rng = x => x.to ? `${x.from}–${x.to}` : x.from;
   $("#dTable").innerHTML = dn ? `<thead><tr><th>Type</th><th>Nu</th><th>Over 12 wk</th><th>Waarvoor</th></tr></thead><tbody>` +
     Object.keys(dn).map(k=>`<tr><td><b>${k}</b><span class="r">${esc(dn[k].name)}</span></td><td><b class="tnum">${rng(dn[k])}</b><span class="r">/km</span></td><td class="tnum">${rng(d12[k])}<span class="r">/km</span></td><td style="white-space:normal;color:var(--muted);font-size:12.5px">${esc(dn[k].doel)}</td></tr>`).join("") + "</tbody>" : "";
-  $$("#pzSeg button").forEach(b => { b.classList.toggle("on", b.dataset.s===pzSrc); b.onclick = () => { pzSrc = b.dataset.s; renderZones(); }; });
+  $$("#pzSeg button").forEach(b => { b.classList.toggle("on", b.dataset.s===pzSrc); b.onclick = () => { pzSrc = b.dataset.s; store.set("pz_src", pzSrc); renderZones(); }; });
   const rows = Z.pace_zones[pzSrc] || [];
   $("#pzCap").textContent = `Op basis van drempeltempo ${S[pzSrc]||"–"}/km (${{garmin:"Garmin lactaatdrempel",model:"jouw VDOT"}[pzSrc]}). Zonegrenzen als % van je drempelsnelheid.`;
   const tp = Z.time_pace?.[pzSrc], th = Z.time_hr, tcell = t => t ? `<td class="tnum"><b>${t.pct}%</b><span class="r">${Math.floor(t.min/60)}:${String(t.min%60).padStart(2,"0")} u</span></td>` : `<td class="muted">–</td>`;
