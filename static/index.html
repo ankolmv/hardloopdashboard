@@ -308,7 +308,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <div class="card"><h3>Slaap</h3><p class="cap">Slaapfasen (uren) en slaapscore</p><div class="chart"><canvas id="cSleep"></canvas></div></div>
     </div>
     <div class="grid g2">
-      <div class="card"><h3>Body Battery &amp; stress</h3><p class="cap">Staaf = laagste tot hoogste Body Battery per dag; lijn = gemiddelde stress</p><div class="chart" id="bbWrap"><canvas id="cBb"></canvas></div></div>
+      <div class="card"><h3>Body Battery &amp; stress</h3><p class="cap">Hoogste en laagste Body Battery per dag, gemiddelde stress</p><div class="chart" id="bbWrap"><canvas id="cBb"></canvas></div></div>
       <div class="card"><h3>Rusthartslag &amp; Training Readiness</h3><p class="cap">Lager rustpols + hogere readiness = beter hersteld</p><div class="chart"><canvas id="cRhr"></canvas></div></div>
     </div>
     <div class="card"><h3>Hartslagherstel na inspanning</h3><p class="cap">Daling in slagen binnen 60 s na je hardste stuk (hoger = fitter)</p><div class="chart sm"><canvas id="cHrr"></canvas></div></div>
@@ -910,11 +910,10 @@ function renderRecovery(){
   if (d.some(x=>x.bb_high!=null || x.stress_avg!=null)){
     if (!$("#cBb")) $("#bbWrap").innerHTML = '<canvas id="cBb"></canvas>';
     mk("cBb", {data:{labels:dd, datasets:[
-      {type:"bar", label:"Body Battery (laag–hoog)", data:d.map(x=>x.bb_low!=null&&x.bb_high!=null?[x.bb_low,x.bb_high]:null),
-       backgroundColor:alpha(css("--blue"),.55), borderRadius:3, grouped:false, barPercentage:.7},
-      {type:"line", label:"Stress", data:d.map(x=>x.stress_avg), borderColor:css("--orange"), pointRadius:0, borderWidth:1.5, tension:.3, spanGaps:true, yAxisID:"y1"},
-    ]}, options:opts({fast:true, tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{min:0, max:100}, y1:{min:0, max:100, display:false},
-      extra:{plugins:{tooltip:{callbacks:{title:dayTip(dd), label:c=>Array.isArray(c.raw)?`Body Battery ${c.raw[0]}–${c.raw[1]}`:`Stress ${c.raw}`}}}}})});
+      {type:"line", label:"BB hoog", data:d.map(x=>x.bb_high), borderColor:css("--blue"), backgroundColor:alpha(css("--blue"),.15), fill:"+1", pointRadius:0, tension:.3, spanGaps:true},
+      {type:"line", label:"BB laag", data:d.map(x=>x.bb_low), borderColor:alpha(css("--blue"),.5), pointRadius:0, tension:.3, spanGaps:true},
+      {type:"bar", label:"Stress", data:d.map(x=>x.stress_avg), backgroundColor:alpha(css("--orange"),.55), borderRadius:2, yAxisID:"y1"},
+    ]}, options:opts({fast:true, tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{min:0, max:100}, y1:{min:0, max:100}})});
   } else { charts.cBb?.destroy(); delete charts.cBb; $("#bbWrap").innerHTML = needGarmin("Body Battery en stress"); }
   mk("cRhr", {data:{labels:dd, datasets:[
     {type:"line", label:"Rusthartslag", data:d.map(x=>x.rhr), borderColor:css("--red"), pointRadius:0, tension:.3, spanGaps:true},
