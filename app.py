@@ -598,7 +598,6 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         "recovery": recovery, "technique": technique, "zones": zones, "activities": activities, "labels": M.RACE_LABELS,
         # Route: startpunt + afstand van de suggestie; de ORS-sleutel alleen lokaal (online zit hij versleuteld in cfg.enc)
         "route": {"home": settings.get("home"), "est_km": (suggestion or {}).get("est_km"),
-                  "segments": data.get("strava_segments") or [], "strava_linked": data.get("strava_linked"),
                   "heat": M.heat_cells(runs, store.route_center()),
                   "ors_key": None if os.environ.get("GITHUB_ACTIONS") else load_env().get("ORS_API_KEY")},
     }

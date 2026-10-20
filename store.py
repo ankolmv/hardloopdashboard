@@ -11,7 +11,6 @@ import os
 import threading
 
 import garmin_client
-import strava_client
 from intervals_client import IntervalsClient
 
 import paths
@@ -247,25 +246,6 @@ def route_center():
     return None
 
 
-def sync_strava():
-    """Populaire hardloopsegmenten rond het startpunt; eens per 7 dagen of als het startpunt verschuift."""
-    if not strava_client.available():
-        return {"strava": "niet gekoppeld"}
-    center = route_center()
-    if not center:
-        return {"strava": "geen startpunt"}
-    cur = _read(os.path.join("strava", "segments.json"), {}) or {}
-    old_c = cur.get("center") or [0, 0]
-    moved = abs(old_c[0] - center[0]) > 0.01 or abs(old_c[1] - center[1]) > 0.015
-    age = dt.datetime.now() - dt.datetime.fromisoformat(cur["fetched_at"]) if cur.get("fetched_at") else None
-    if not moved and age is not None and age < dt.timedelta(days=7):
-        return {"strava": "ok (cache)", "strava_segments": len(cur.get("segments") or [])}
-    segs = strava_client.explore_around(center)
-    _write(os.path.join("strava", "segments.json"), {"center": center, "segments": segs,
-                                                     "fetched_at": dt.datetime.now().isoformat(timespec="seconds")})
-    return {"strava": "ok", "strava_segments": len(segs)}
-
-
 def sync():
     with _lock:
         if intervals_configured():
@@ -278,10 +258,6 @@ def sync():
             meta.update(sync_garmin())
         except Exception as e:  # noqa: BLE001  – Garmin mag de sync nooit breken
             meta.update({"garmin": f"fout: {e}"})
-        try:
-            meta.update(sync_strava())
-        except Exception as e:  # noqa: BLE001  – Strava mag de sync nooit breken
-            meta.update({"strava": f"fout: {e}"})
         meta["synced_at"] = dt.datetime.now().isoformat(timespec="seconds")
         _write("meta.json", meta)
         return meta
@@ -312,8 +288,6 @@ def load():
         "garmin_activities": _read(os.path.join("garmin", "activities.json"), []),
         "garmin_linked": garmin_client.available(),
         "garmin_extra": _read_dir(os.path.join("garmin", "extra")),
-        "strava_segments": (_read(os.path.join("strava", "segments.json"), {}) or {}).get("segments") or [],
-        "strava_linked": strava_client.available(),
     }
 
 

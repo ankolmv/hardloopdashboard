@@ -756,7 +756,7 @@ const COMPASS = ["N","NNO","NO","ONO","O","OZO","ZO","ZZO","Z","ZZW","ZW","WZW",
 const beaufort = kmh => [1,6,12,20,29,39,50,62,75,89,103,118].findIndex(x => kmh < x) === -1 ? 12 : [1,6,12,20,29,39,50,62,75,89,103,118].findIndex(x => kmh < x);
 function parseLL(v){ const m = String(v||"").replace(/[()]/g,"").split(/[,;\s]+/).filter(Boolean).map(Number); return m.length === 2 && m.every(isFinite) ? m : null; }
 
-// ---------- populaire plekken (eigen warmtekaart + Strava-segmenten)
+// ---------- populaire plekken (eigen warmtekaart uit je GPS-sporen)
 const CELL = 0.0003;
 const cellKey = (la, lo) => `${Math.round(la / CELL)},${Math.round(lo / CELL)}`;
 let POP = null;
@@ -766,14 +766,6 @@ function popularIndex(){
   for (const [la, lo, n] of D.route?.heat || []){
     if (n >= 2) set.add(cellKey(la, lo));
     if (n >= 4) anchors.push({ll:[la, lo], w: Math.min(n, 12) / 12});
-  }
-  for (const sg of D.route?.segments || []){
-    const pts = sg.pts || [], w = Math.max(0.4, 1.4 - 0.1 * (sg.rank || 0));
-    for (let i = 1; i < pts.length; i++){  // verdichten tot ±30 m
-      const d = hav(pts[i-1], pts[i]), n = Math.max(1, Math.round(d / 30));
-      for (let k = 0; k < n; k++){ const f = k / n; set.add(cellKey(pts[i-1][0] + (pts[i][0]-pts[i-1][0])*f, pts[i-1][1] + (pts[i][1]-pts[i-1][1])*f)); }
-    }
-    if (pts.length){ anchors.push({ll:pts[0], w}); anchors.push({ll:pts[Math.floor(pts.length/2)], w}); anchors.push({ll:pts[pts.length-1], w}); }
   }
   return POP = {set, anchors};
 }
@@ -907,10 +899,9 @@ function drawRoute(){
   for (const [ll, k] of kms) L.marker(ll, {icon:L.divIcon({className:"kmlabel", html:`${k}`, iconSize:null})}).addTo(RT.layers);
   L.circleMarker(r.coords[0], {radius:8, color:"#fff", weight:3, fillColor:css("--green"), fillOpacity:1}).bindTooltip(r.trimmed ? "Start" : "Start / finish").addTo(RT.layers);
   if (r.trimmed) L.circleMarker(r.coords[r.coords.length-1], {radius:7, color:"#fff", weight:3, fillColor:css("--red"), fillOpacity:1}).bindTooltip(`Finish (${r.trimmed} m voor de start)`).addTo(RT.layers);
-  if (RT.showPop){
+  if (RT.showPop){  // je eigen looproutes als stippen
     const cv = L.canvas({padding:0.2});
     for (const [la, lo, n] of D.route?.heat || []) if (n >= 2) L.circleMarker([la, lo], {renderer:cv, radius:2, stroke:false, fillColor:css("--purple"), fillOpacity:Math.min(.55, .12 + n * .04)}).addTo(RT.layers);
-    for (const sg of D.route?.segments || []) L.polyline(sg.pts, {color:"#555", weight:2, opacity:.45, dashArray:"4 4"}).bindTooltip(`Strava: ${esc(sg.name)}`).addTo(RT.layers);
   }
   RT.map.fitBounds(L.polyline(r.coords).getBounds(), {padding:[24,24]});
   setTimeout(() => RT.map.invalidateSize(), 50);
@@ -928,8 +919,7 @@ function drawRoute(){
       ${weak ? "Er staat weinig wind, dus de richting maakt nauwelijks uit." : ""} Route ${RT.idx+1}${RT.mode==="loop"?` van ${RT.cands.length}`:""}.
       ${r.trimmed ? `Eindigt ${r.trimmed} m voor de start (zonder stuk terug over het begin).` : ""}
       ${r.compromise ? `<b>Let op:</b> geen rondje gevonden dat helemaal aan de eisen voldoet; dit is het beste compromis.` : ""}
-      Voorkeur voor groen en rustige paden${(D.route?.heat||[]).length?", je eigen looproutes":""}${(D.route?.segments||[]).length?" en populaire Strava-segmenten":""}.
-      ${(D.route?.segments||[]).length ? `<span style="color:#fc4c02;font-weight:700">Powered by Strava</span>` : ""}</p>
+      Voorkeur voor groen en rustige paden${(D.route?.heat||[]).length?" en je eigen looproutes":""}.</p>
     <label class="muted" style="font-size:12.5px;display:inline-flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="rtPop" ${RT.showPop?"checked":""}> Populaire paden tonen op de kaart</label>`;
   $("#rtPop").onchange = e => { RT.showPop = e.target.checked; store.set("route_pop", RT.showPop ? "1" : ""); drawRoute(); };
 }
@@ -946,7 +936,6 @@ function renderRouteCard(){
       <button class="btn primary" id="rtGo">Maak route</button><button class="btn" id="rtNext">Andere route</button>
       <button class="btn" id="rtSave" title="Bewaar als standaard startpunt (alle apparaten)">Startpunt opslaan</button></div>
     <div id="routeMsg" class="muted" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
-    ${R.strava_linked ? "" : `<p class="cap" style="margin:0">Tip: koppel Strava voor populaire hardloopsegmenten (<code>python strava_login.py</code>, daarna <code>set_strava_secrets.ps1</code>).</p>`}
     <div id="routeInfo"></div><div class="routemap" id="routeMap"></div>`;
   RT.map = null; RT.layers = null;
   $$("#rtMode button").forEach(b => { b.classList.toggle("on", b.dataset.m === RT.mode);
