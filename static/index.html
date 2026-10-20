@@ -739,9 +739,11 @@ async function orsKey(){ if (D.route?.ors_key) return D.route.ors_key; if (STATI
 async function ors(body){
   const key = await orsKey();
   const r = await fetch("https://api.openrouteservice.org/v2/directions/foot-walking/geojson", {method:"POST",
-    headers:{Authorization:key, "Content-Type":"application/json", Accept:"application/geo+json"}, body:JSON.stringify(body)});
+    headers:{Authorization:key, "Content-Type":"application/json", Accept:"application/geo+json"}, body:JSON.stringify(body)})
+    .catch(() => { throw new Error("OpenRouteService reageert niet; waarschijnlijk te veel routes in korte tijd (max 40 per minuut). Wacht een minuut en probeer opnieuw."); });
   if (!r.ok){ let m = ""; try { m = (await r.json()).error?.message || ""; } catch {}
-    throw new Error(r.status===401||r.status===403 ? "OpenRouteService weigert de sleutel (controleer je ORS-sleutel of het dagtegoed)." :
+    throw new Error(r.status===429 ? "Te veel routes in korte tijd (max 40 per minuut). Wacht een minuut en probeer opnieuw." :
+      r.status===401||r.status===403 ? "OpenRouteService weigert de sleutel (controleer je ORS-sleutel of het dagtegoed)." :
       r.status===404 ? "Geen looppad gevonden bij dit startpunt. Kies een punt dichter bij een weg of pad." : `OpenRouteService gaf ${r.status}. ${m}`); }
   const j = await r.json(); return j.features[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
 }
@@ -756,14 +758,22 @@ function parseLL(v){ const m = String(v||"").replace(/[()]/g,"").split(/[,;\s]+/
 
 async function makeLoops(start, L, windFrom){
   const seeds = [...Array(6).keys()].map(i => RT.seedBase + i);
-  const res = await Promise.allSettled(seeds.map(seed => ors({coordinates:[[start[1], start[0]]], options:{round_trip:{length:Math.round(L), points:4, seed}}})));
+  // ORS maakt rondjes gemiddeld wat korter dan gevraagd: vraag 6% langer aan. Max 6 verzoeken (limiet 40/min)
+  // Na elkaar i.p.v. tegelijk: de gratis ORS-sleutel weigert te veel gelijktijdige verzoeken
+  const res = [];
+  for (const seed of seeds.slice(0, 5)){
+    try { res.push({status:"fulfilled", value: await ors({coordinates:[[start[1], start[0]]], options:{round_trip:{length:Math.round(L * 1.06), points:4, seed}}})}); }
+    catch(e){ res.push({status:"rejected", reason:e}); if (/te veel|reageert niet/i.test(e.message)) break; }
+  }
   const ok = res.filter(r => r.status === "fulfilled").map(r => r.value);
   if (!ok.length) throw (res[0].reason || new Error("Geen routes gevonden."));
   let c = [];
   for (const coords of ok){ for (const dir of [coords, [...coords].reverse()]){ const w = windScore(dir, windFrom); c.push({coords:dir, ...w}); } }
   const near = c.filter(x => Math.abs(x.len - L) / L <= 0.12);
   c = (near.length ? near : c.sort((a,b)=>Math.abs(a.len-L)-Math.abs(b.len-L)).slice(0,4));
-  return c.sort((a,b) => b.score - a.score);
+  // Rangschikken op wind én afstand: elke 1% afwijking kost 0,03 windpunten
+  const rank = x => x.score - 3 * Math.abs(x.len - L) / L;
+  return c.sort((a,b) => rank(b) - rank(a));
 }
 async function makeOutBack(start, L, windFrom, offset){
   const brg = (windFrom + offset + 360) % 360; let straight = 0.8 * L / 2, path = null;
