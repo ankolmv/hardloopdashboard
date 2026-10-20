@@ -37,6 +37,11 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 - **Duurcorrectie**: vanaf 10 km geleidelijk extra tijd bij weinig km/week of korte lange duurlopen.
 - **Garmin Connect** gaat via de onofficiële `garminconnect`-library; als Garmin iets wijzigt valt alleen dat deel weg.
 
+## Garmin-login: pc en cloud apart
+De cloud ververst zijn Garmin-token bij elke run; daardoor wordt een gedeelde kopie ongeldig. Gebruik daarom op de
+pc een eigen login (`python garmin_login.py`) en deel het tokenbestand niet met de cloud (die heeft zijn eigen token
+in de versleutelde cache).
+
 ## Online via GitHub (alle apparaten)
 De workflow `.github/workflows/dashboard.yml` draait elk uur (en bij acties vanaf de site):
 cache terugzetten → actie → sync (intervals.icu + Garmin) → statische site bouwen → cache opslaan → GitHub Pages.

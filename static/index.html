@@ -6,7 +6,7 @@
 <title>Prestatiedashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#f4f5f7;--bg2:#eceef2;--card:#ffffff;--text:#14171c;--muted:#6b7280;--faint:#9ca3af;--line:#e6e8ec;--chip:#f1f3f6;
@@ -308,7 +308,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <div class="card"><h3>Slaap</h3><p class="cap">Slaapfasen (uren) en slaapscore</p><div class="chart"><canvas id="cSleep"></canvas></div></div>
     </div>
     <div class="grid g2">
-      <div class="card"><h3>Body Battery &amp; stress</h3><p class="cap">Hoogste en laagste Body Battery per dag, gemiddelde stress</p><div class="chart" id="bbWrap"><canvas id="cBb"></canvas></div></div>
+      <div class="card"><h3>Body Battery &amp; stress</h3><p class="cap">Staaf = laagste tot hoogste Body Battery per dag; lijn = gemiddelde stress</p><div class="chart" id="bbWrap"><canvas id="cBb"></canvas></div></div>
       <div class="card"><h3>Rusthartslag &amp; Training Readiness</h3><p class="cap">Lager rustpols + hogere readiness = beter hersteld</p><div class="chart"><canvas id="cRhr"></canvas></div></div>
     </div>
     <div class="card"><h3>Hartslagherstel na inspanning</h3><p class="cap">Daling in slagen binnen 60 s na je hardste stuk (hoger = fitter)</p><div class="chart sm"><canvas id="cHrr"></canvas></div></div>
@@ -585,8 +585,12 @@ Chart.register({id:"bands", beforeDatasetsDraw(chart, args, o){
     const top = Math.max(a.top, Math.min(p0,p1)), bot = Math.min(a.bottom, Math.max(p0,p1)); if (bot <= top) return;
     ctx.save(); ctx.fillStyle = col; ctx.fillRect(a.left, top, a.right-a.left, bot-top); ctx.restore(); });
 }});
-function opts({y={}, y1=null, x={}, legend=true, tooltipTitle=null, extra={}, bands=null}={}){
-  const o = {responsive:true, maintainAspectRatio:false, interaction:{mode:"index", intersect:false}, animation:{duration:400},
+function opts({y={}, y1=null, x={}, legend=true, tooltipTitle=null, extra={}, bands=null, fast=false}={}){
+  const o = {responsive:true, maintainAspectRatio:false, interaction:{mode:"index", intersect:false},
+    // Dagreeksen: geen animaties (minder rekenwerk per hover, vooral op telefoons)
+    animation: fast ? false : {duration:400}, ...(fast ? {transitions:{active:{animation:{duration:0}}}} : {}),
+    // touchend/mouseout: tooltip verdwijnt als je je vinger loslaat of de grafiek verlaat
+    events:["mousemove","mouseout","click","touchstart","touchmove","touchend"],
     plugins:{legend:{display:legend, position:"top", align:"end", labels:{boxWidth:8, boxHeight:8, usePointStyle:true, padding:14}},
       tooltip:{backgroundColor:css("--card"), titleColor:css("--text"), bodyColor:css("--muted"), borderColor:css("--line"), borderWidth:1, padding:10, cornerRadius:10,
         callbacks:tooltipTitle?{title:tooltipTitle}:{}}},
@@ -595,10 +599,13 @@ function opts({y={}, y1=null, x={}, legend=true, tooltipTitle=null, extra={}, ba
   if (bands) { o.plugins = o.plugins || {}; o.plugins.bands = bands; }
   return o;
 }
-const weekTip = rows => items => { const r = rows[items[0].dataIndex]; return r ? `${r.label} · ${r.range}` : ""; };
+// Tooltiptitels moeten tegen een lege lijst kunnen (bijv. dag zonder meting); een fout hier laat Chart.js vastlopen
+const safeTitle = fn => items => { try { return items && items.length ? fn(items) : ""; } catch { return ""; } };
+const weekTip = rows => safeTitle(items => { const r = rows[items[0].dataIndex]; return r ? `${r.label} · ${r.range}` : ""; });
 // Daglabels: alleen op maandag het weeknummer tonen
-const dayTicks = days => ({ticks:{autoSkip:false, maxRotation:0, callback:(v,i)=>{ const d = new Date(days[i]+"T12:00:00"); return d.getDay()===1 ? `wk ${isoWeek(days[i])}` : ""; }}});
-const dayTip = days => items => dayLabel(days[items[0].dataIndex]);
+const dayTicks = days => { const lab = days.map(ds => new Date(ds+"T12:00:00").getDay()===1 ? `wk ${isoWeek(ds)}` : "");
+  return {ticks:{autoSkip:false, maxRotation:0, callback:(v,i)=>lab[i]}}; };
+const dayTip = days => safeTitle(items => days[items[0].dataIndex] ? dayLabel(days[items[0].dataIndex]) : "");
 const alpha = (c, a) => c + Math.round(a*255).toString(16).padStart(2,"0");
 function spark(values, color){
   const v = values.map(x => x==null ? null : +x), vals = v.filter(x=>x!=null);
@@ -833,7 +840,7 @@ function renderTraining(){
     {type:"bar", label:"Vorm (TSB)", data:L.map(x=>x.tsb), backgroundColor:L.map(x=>x.tsb<0?alpha(css("--orange"),.45):alpha(css("--green"),.45)), borderRadius:2},
     {type:"line", label:"Fitheid (CTL)", data:L.map(x=>x.ctl), borderColor:css("--blue"), borderWidth:2.5, pointRadius:0, tension:.35},
     {type:"line", label:"Vermoeidheid (ATL)", data:L.map(x=>x.atl), borderColor:css("--purple"), borderWidth:1.5, pointRadius:0, tension:.35},
-  ]}, options:opts({tooltipTitle:dayTip(ld), x:dayTicks(ld)})});
+  ]}, options:opts({fast:true, tooltipTitle:dayTip(ld), x:dayTicks(ld)})});
   const zk = zoneMode==="hr" ? "z7" : "pz7", ZW = W.filter(w=>w[zk]), nz = ZW.length ? ZW[0][zk].length : 7;
   const nEasy = zoneMode==="hr" && nz===5 && D.zones.hr_active==="garmin" ? 3 : 2;
   mk("cZones", {type:"bar", data:{labels:ZW.map(w=>w.label), datasets:[...Array(nz).keys()].map(i=>({
@@ -849,11 +856,11 @@ function renderTraining(){
     mk("cTe", {type:"scatter", data:{datasets:[{label:"Runs", data:T.te_runs.map(r=>({x:r.a, y:r.an, n:r.name, d:r.date, l:r.label})),
       backgroundColor:alpha(css("--accent"),.7), pointRadius:7, pointHoverRadius:9}]},
       options:opts({legend:false, x:{min:0, max:5, title:{display:true,text:"Aeroob TE"}, grid:{color:css("--line")}}, y:{min:0, max:5, title:{display:true,text:"Anaeroob TE"}},
-        extra:{interaction:{mode:"nearest", intersect:true}, plugins:{legend:{display:false}, tooltip:{callbacks:{title:i=>dayLabel(i[0].raw.d), label:i=>`${i.raw.n}: ${i.raw.x} / ${i.raw.y} ${i.raw.l?"· "+prettify(i.raw.l):""}`}}}}})});
+        extra:{interaction:{mode:"nearest", intersect:true}, plugins:{legend:{display:false}, tooltip:{callbacks:{title:safeTitle(i=>dayLabel(i[0].raw.d)), label:i=>`${i.raw.n}: ${i.raw.x} / ${i.raw.y} ${i.raw.l?"· "+prettify(i.raw.l):""}`}}}}})});
   } else { charts.cTe?.destroy(); delete charts.cTe; $("#teWrap").innerHTML = D.garmin_linked ? `<div class="empty">Nog geen Training Effect in deze periode.</div>` : needGarmin("Training Effect"); }
   mk("cRpe", {type:"scatter", data:{datasets:[{label:"Runs", data:T.rpe_runs.map(r=>({x:r.load, y:r.rpe, n:r.name, d:r.date})), backgroundColor:alpha(css("--blue"),.65), pointRadius:6}]},
     options:opts({legend:false, x:{title:{display:true,text:"Belasting"}, grid:{color:css("--line")}}, y:{min:0, max:10, title:{display:true,text:"RPE"}},
-      extra:{interaction:{mode:"nearest", intersect:true}, plugins:{legend:{display:false}, tooltip:{callbacks:{title:i=>dayLabel(i[0].raw.d), label:i=>`${i.raw.n}: RPE ${i.raw.y}, belasting ${i.raw.x}`}}}}})});
+      extra:{interaction:{mode:"nearest", intersect:true}, plugins:{legend:{display:false}, tooltip:{callbacks:{title:safeTitle(i=>dayLabel(i[0].raw.d)), label:i=>`${i.raw.n}: RPE ${i.raw.y}, belasting ${i.raw.x}`}}}}})});
   renderScenario();
 }
 function renderScenario(){
@@ -874,18 +881,22 @@ function renderRecovery(){
   const R = D.recovery, t = R.today, a = R.averages, d = R.days, dd = d.map(x=>x.date);
   const vs = (v, avg, unit="", inv=false, dec=0) => v==null ? "" : avg==null ? "" : (() => { const df = v-avg; const good = inv ? df<=0 : df>=0; return `<span class="delta ${good?"up":"down"}">${df>=0?"+":""}${fmt(df,dec)}${unit}</span> t.o.v. 28 d`; })();
   $("#recTiles").innerHTML = [
-    tile("Training Readiness", t.readiness!=null?fmt(t.readiness,0)+"<small>/100</small>":"–", t.readiness_level?esc(prettify(t.readiness_level)):(D.garmin_linked?"":"koppel Garmin"), "--green", d.map(x=>x.readiness)),
+    tile("Training Readiness", t.readiness!=null?fmt(t.readiness,0)+"<small>/100</small>":"–",
+      [t.readiness_level?esc(prettify(t.readiness_level)):(D.garmin_linked?"":"koppel Garmin"), t.readiness_time?`gemeten ${t.readiness_time}`:""].filter(Boolean).join(" · "),
+      "--green", d.map(x=>x.readiness)),
     tile("HRV", t.hrv!=null?fmt(t.hrv,0)+"<small>ms</small>":"–", t.hrv_status?esc(prettify(t.hrv_status)):vs(t.hrv, a.hrv, " ms"), "--pink", d.map(x=>x.hrv)),
     tile("Rusthartslag", t.rhr!=null?fmt(t.rhr,0)+"<small>bpm</small>":"–", vs(t.rhr, a.rhr, "", true), "--red", d.map(x=>x.rhr)),
     tile("Slaap", t.sleep_h!=null?hms(t.sleep_h*3600).slice(0,-3)+"<small>u</small>":"–", t.sleep_score!=null?`score ${fmt(t.sleep_score,0)}`:"", "--purple", d.map(x=>x.sleep_h)),
     tile("Body Battery", t.bb_high!=null?fmt(t.bb_high,0):"–", t.bb_wake!=null?`bij wakker worden ${t.bb_wake}`:(D.garmin_linked?"":"koppel Garmin"), "--blue", d.map(x=>x.bb_high)),
     tile("Stress", t.stress_avg!=null?fmt(t.stress_avg,0):"–", t.stress_avg!=null?"gemiddeld (0–100)":(D.garmin_linked?"":"koppel Garmin"), "--orange", d.map(x=>x.stress_avg)),
   ].join("");
+  const lastBase = [...d].reverse().find(x => x.hrv_base_lo != null && x.hrv_base_hi != null);
   mk("cHrv", {type:"line", data:{labels:dd, datasets:[
-    {label:"bandHi", data:d.map(x=>x.hrv_base_hi??null), borderWidth:0, pointRadius:0, backgroundColor:alpha(css("--green"),.12), fill:"+1", spanGaps:true},
-    {label:"bandLo", data:d.map(x=>x.hrv_base_lo??null), borderWidth:0, pointRadius:0, spanGaps:true},
     {label:"HRV (ms)", data:d.map(x=>x.hrv), borderColor:css("--pink"), backgroundColor:css("--pink"), borderWidth:2, pointRadius:2, tension:.3, spanGaps:true},
-  ]}, options:opts({tooltipTitle:dayTip(dd), x:dayTicks(dd), extra:{plugins:{legend:{display:false}, tooltip:{filter:i=>!i.dataset.label.startsWith("band"), callbacks:{title:dayTip(dd)}}}}})});
+  ]}, options:opts({fast:true, tooltipTitle:dayTip(dd), x:dayTicks(dd), legend:false,
+    bands: lastBase ? {axis:"y", list:[[lastBase.hrv_base_lo, lastBase.hrv_base_hi, alpha(css("--green"),.13)]]} : null})});
+  $("#cHrv").closest(".card").querySelector(".cap").textContent = lastBase
+    ? `Nachtelijke HRV; groen = je normale bandbreedte volgens Garmin (${lastBase.hrv_base_lo}–${lastBase.hrv_base_hi} ms)` : "Nachtelijke HRV";
   const hasStages = d.some(x=>x.sleep_deep_h!=null);
   mk("cSleep", {data:{labels:dd, datasets: hasStages ? [
     {type:"bar", label:"Diep", data:d.map(x=>x.sleep_deep_h), backgroundColor:alpha(css("--purple"),.95), stack:"s"},
@@ -895,22 +906,23 @@ function renderRecovery(){
   ] : [
     {type:"bar", label:"Slaap (u)", data:d.map(x=>x.sleep_h), backgroundColor:alpha(css("--purple"),.75), borderRadius:3},
     {type:"line", label:"Score", data:d.map(x=>x.sleep_score), borderColor:css("--accent"), pointRadius:0, tension:.3, yAxisID:"y1", spanGaps:true},
-  ]}, options:opts({tooltipTitle:dayTip(dd), x:{...dayTicks(dd), stacked:true}, y:{stacked:true, title:{display:true,text:"uur"}}, y1:{min:0, max:100}})});
+  ]}, options:opts({fast:true, tooltipTitle:dayTip(dd), x:{...dayTicks(dd), stacked:true}, y:{stacked:true, title:{display:true,text:"uur"}}, y1:{min:0, max:100}})});
   if (d.some(x=>x.bb_high!=null || x.stress_avg!=null)){
     if (!$("#cBb")) $("#bbWrap").innerHTML = '<canvas id="cBb"></canvas>';
     mk("cBb", {data:{labels:dd, datasets:[
-      {type:"line", label:"BB hoog", data:d.map(x=>x.bb_high), borderColor:css("--blue"), backgroundColor:alpha(css("--blue"),.15), fill:"+1", pointRadius:0, tension:.3, spanGaps:true},
-      {type:"line", label:"BB laag", data:d.map(x=>x.bb_low), borderColor:alpha(css("--blue"),.5), pointRadius:0, tension:.3, spanGaps:true},
-      {type:"bar", label:"Stress", data:d.map(x=>x.stress_avg), backgroundColor:alpha(css("--orange"),.55), borderRadius:2, yAxisID:"y1"},
-    ]}, options:opts({tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{min:0, max:100}, y1:{min:0, max:100}})});
+      {type:"bar", label:"Body Battery (laag–hoog)", data:d.map(x=>x.bb_low!=null&&x.bb_high!=null?[x.bb_low,x.bb_high]:null),
+       backgroundColor:alpha(css("--blue"),.55), borderRadius:3, grouped:false, barPercentage:.7},
+      {type:"line", label:"Stress", data:d.map(x=>x.stress_avg), borderColor:css("--orange"), pointRadius:0, borderWidth:1.5, tension:.3, spanGaps:true, yAxisID:"y1"},
+    ]}, options:opts({fast:true, tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{min:0, max:100}, y1:{min:0, max:100, display:false},
+      extra:{plugins:{tooltip:{callbacks:{title:dayTip(dd), label:c=>Array.isArray(c.raw)?`Body Battery ${c.raw[0]}–${c.raw[1]}`:`Stress ${c.raw}`}}}}})});
   } else { charts.cBb?.destroy(); delete charts.cBb; $("#bbWrap").innerHTML = needGarmin("Body Battery en stress"); }
   mk("cRhr", {data:{labels:dd, datasets:[
     {type:"line", label:"Rusthartslag", data:d.map(x=>x.rhr), borderColor:css("--red"), pointRadius:0, tension:.3, spanGaps:true},
     {type:"bar", label:"Readiness", data:d.map(x=>x.readiness), backgroundColor:alpha(css("--green"),.5), borderRadius:2, yAxisID:"y1"},
-  ]}, options:opts({tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{title:{display:true,text:"bpm"}}, y1:{min:0, max:100}})});
+  ]}, options:opts({fast:true, tooltipTitle:dayTip(dd), x:dayTicks(dd), y:{title:{display:true,text:"bpm"}}, y1:{min:0, max:100}})});
   const H = R.hrr_runs;
   mk("cHrr", {type:"line", data:{labels:H.map(h=>`wk ${isoWeek(h.date)}`), datasets:[{label:"Hartslagdaling 60 s", data:H.map(h=>h.hrr), borderColor:css("--green"), backgroundColor:alpha(css("--green"),.12), fill:true, tension:.3, pointRadius:4}]},
-    options:opts({legend:false, tooltipTitle:i=>dayLabel(H[i[0].dataIndex].date), y:{title:{display:true,text:"slagen"}}})});
+    options:opts({legend:false, tooltipTitle:safeTitle(i=>dayLabel(H[i[0].dataIndex].date)), y:{title:{display:true,text:"slagen"}}})});
 }
 
 // --------------------------------------------------------------------- techniek
@@ -1081,9 +1093,9 @@ async function openRun(id){
     mk("cRun", {data:{labels:det.distance, datasets:[
       {type:"line", label:{pace:"Tempo", hr:"Hartslag", cadence:"Cadans", watts:"Vermogen"}[k], data:det[k], borderColor:css(col), borderWidth:1.8, pointRadius:0, tension:.2, spanGaps:true},
       {type:"line", label:"Hoogte", data:det.altitude, borderWidth:0, backgroundColor:alpha(css("--faint"),.18), fill:"origin", pointRadius:0, yAxisID:"y1"},
-    ]}, options:opts({legend:false, tooltipTitle:i=>`${det.distance[i[0].dataIndex]} km`, x:{ticks:{maxTicksLimit:10, callback:(v,i)=>det.distance[i]?.toFixed(0)+" km"}},
+    ]}, options:opts({legend:false, tooltipTitle:safeTitle(i=>`${det.distance[i[0].dataIndex]} km`), x:{ticks:{maxTicksLimit:10, callback:(v,i)=>det.distance[i]?.toFixed(0)+" km"}},
       y:k==="pace"?{reverse:true, ticks:{callback:v=>mmss(v)}, suggestedMin:180, suggestedMax:480}:{}, y1:{display:false},
-      extra:{plugins:{legend:{display:false}, tooltip:{callbacks:{title:i=>`${det.distance[i[0].dataIndex]} km`, label:c=>c.dataset.label==="Hoogte"?`Hoogte ${Math.round(c.raw)} m`:k==="pace"?`Tempo ${mmss(c.raw)}/km`:`${c.dataset.label} ${c.raw}`}}}}})});
+      extra:{plugins:{legend:{display:false}, tooltip:{callbacks:{title:safeTitle(i=>`${det.distance[i[0].dataIndex]} km`), label:c=>c.dataset.label==="Hoogte"?`Hoogte ${Math.round(c.raw)} m`:k==="pace"?`Tempo ${mmss(c.raw)}/km`:`${c.dataset.label} ${c.raw}`}}}}})});
   };
   draw("pace");
   $$("#dSeg button").forEach(b => b.onclick = () => { $$("#dSeg button").forEach(x=>x.classList.toggle("on", x===b)); draw(b.dataset.k); });

@@ -57,8 +57,16 @@ def fetch_day(g, day):
     ds = day.isoformat()
     out = {"date": ds}
 
-    tr = _first(_try(g.get_training_readiness, ds))
+    trs = _try(g.get_training_readiness, ds)
+    trs = [x for x in (trs if isinstance(trs, list) else [trs]) if isinstance(x, dict) and x.get("score") is not None]
+    # Garmin werkt readiness gedurende de dag bij: neem de meest recente meting, niet de eerste
+    stamp = lambda x: str(x.get("timestampLocal") or x.get("timestamp") or "")
+    tr = max(trs, key=stamp) if trs else None
     if isinstance(tr, dict):
+        out["readiness_time"] = stamp(tr)[11:16] or None
+        morning = min(trs, key=stamp)
+        if morning is not tr:
+            out["readiness_morning"] = morning.get("score")
         out["readiness"] = tr.get("score")
         out["readiness_level"] = tr.get("level")
         out["readiness_feedback"] = tr.get("feedbackShort") or tr.get("feedbackLong")

@@ -2,7 +2,7 @@ name: Dashboard
 
 on:
   schedule:
-    - cron: "17 * * * *"   # elk uur
+    - cron: "7,37 * * * *"   # elk halfuur (GitHub slaat geplande runs soms over)
   workflow_dispatch:
     inputs:
       action:
