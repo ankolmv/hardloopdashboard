@@ -264,11 +264,12 @@ def suggest(runs, daily_by, zones, paces, today, long_days=(4, 5, 6)):
                    f"Je herstel is laag: {when} rust of hooguit 20–30 min wandelen levert het meeste op.")
         steps = []
     elif (readiness is not None and readiness < 45) or hard_yesterday or (acwr and acwr > 1.5):
-        kind, title = "herstel", "Herstelloop 30 min"
-        why.append("Na een zware training of bij matig herstel: kort en echt rustig, zodat je lichaam kan opladen."
-                   if hard_yesterday else "Je herstel is matig: kort en rustig houden.")
-        steps = [{"kind": "run", "secs": 1800, "hr": [z[0][0] if z[0][0] > 100 else z[1][0] - 15, z[1][0] + 8],
-                  "label": "Rustig, hartslag laag"}]
+        kind, title = "herstel", "Rustige herstelrun 30 min (Z2)"
+        why.append("Na een zware training of bij matig herstel: kort en rustig in Z2, blijf in de onderste helft "
+                   f"(±{z[1][0] + 5}–{z[1][0] + 17} bpm) en zeker niet in Z3." if hard_yesterday else
+                   f"Je herstel is matig: kort en rustig in Z2, bij voorkeur in de onderste helft (±{z[1][0] + 5}–{z[1][0] + 17} bpm).")
+        steps = [{"kind": "run", "secs": 1800, "hr": hr(1), "pace": [paces["E_fast"], paces["E_slow"]],
+                  "label": "Rustig in Z2 (onderste helft)"}]
     elif wd in long_days and not long_done and (wd != 4 or (readiness or 60) >= 60):
         mins = int(min(110, max(60, round(longest * 1.1 / 5) * 5)))
         kind, title = "lang", f"Lange duurloop {mins} min"
