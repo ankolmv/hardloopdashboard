@@ -73,7 +73,17 @@ def analyze_session(r, runs, daily_by, zones, paces):
     prev_day = [x for x in prev if x["date"] == (d - dt.timedelta(days=1)).isoformat()]
     hard_before = next((x for x in reversed(prev) if is_hard(x)), None)
     day = daily_by.get(r["date"], {})
-    ctx = {"readiness": day.get("readiness"), "sleep_h": day.get("sleep_h"), "hrv_status": day.get("hrv_status"),
+    # Readiness vóór de training: laatste meting van die dag vóór de starttijd (anders de vorige dag)
+    t0 = (r.get("start") or "")[11:16]
+    before = [x for x in day.get("readiness_list") or [] if t0 and x.get("t") and x["t"] <= t0 and x.get("score") is not None]
+    if before:
+        ready, ready_t = before[-1]["score"], before[-1]["t"]
+    elif day.get("readiness_list"):  # alleen metingen ná de training: vorige dag als benadering
+        prev = daily_by.get((d - dt.timedelta(days=1)).isoformat(), {})
+        ready, ready_t = prev.get("readiness"), None
+    else:
+        ready, ready_t = day.get("readiness"), day.get("readiness_time")
+    ctx = {"readiness": ready, "readiness_time": ready_t, "sleep_h": day.get("sleep_h"), "hrv_status": day.get("hrv_status"),
            "acwr": day.get("acwr"),
            "prev_day": ({"name": prev_day[-1]["name"], "type": TYPE_LABELS[classify(prev_day[-1])],
                          "hard": is_hard(prev_day[-1])} if prev_day else None),

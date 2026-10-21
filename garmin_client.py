@@ -64,6 +64,9 @@ def fetch_day(g, day):
     tr = max(trs, key=stamp) if trs else None
     if isinstance(tr, dict):
         out["readiness_time"] = stamp(tr)[11:16] or None
+        # Alle metingen van de dag (lokale tijd), zodat een analyse de waarde vóór een training kan gebruiken
+        out["readiness_list"] = [{"t": stamp(x)[11:16], "score": x.get("score"), "level": x.get("level")}
+                                 for x in sorted(trs, key=stamp) if stamp(x)[:10] == ds]
         morning = min(trs, key=stamp)
         if morning is not tr:
             out["readiness_morning"] = morning.get("score")

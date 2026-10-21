@@ -103,7 +103,8 @@ def sync_garmin():
     for i in range(GARMIN_DAYS):
         d = today - dt.timedelta(days=i)
         name = os.path.join("garmin", "daily", f"{d.isoformat()}.json")
-        if i >= 3 and os.path.exists(_path(name)):
+        if i >= 3 and os.path.exists(_path(name)) and (i > 14 or "readiness_list" in (_read(name, {}) or {})
+                                                        or "readiness" not in (_read(name, {}) or {})):
             continue
         _write(name, garmin_client.fetch_day(g, d))
         days += 1

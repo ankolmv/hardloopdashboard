@@ -642,7 +642,7 @@ function zoneBar(pcts, rows){
 const tipList = (items) => items.length ? `<ul class="tiplist">${items.map(t=>`<li class="${t.tone}"><span class="dot">${svgI(TIP_IC[t.tone]||TIP_IC.neutral)}</span><span>${esc(t.text)}</span></li>`).join("")}</ul>` : "";
 function ctxChips(c, a){
   const x = [];
-  if (c.readiness!=null) x.push(`Readiness <b>${c.readiness}</b>`);
+  if (c.readiness!=null) x.push(`Readiness vooraf <b>${c.readiness}</b>${c.readiness_time?` (${c.readiness_time})`:""}`);
   if (c.sleep_h) x.push(`Slaap <b>${fmt(c.sleep_h,1)} u</b>`);
   if (c.hrv_status) x.push(`HRV <b>${esc(prettify(c.hrv_status))}</b>`);
   if (c.acwr) x.push(`Acuut/chronisch <b>${fmt(c.acwr,1)}</b>`);
