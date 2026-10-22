@@ -12,7 +12,8 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 ## Tabs
 | Tab | Inhoud |
 |---|---|
-| Overzicht | Doel, training voor vandaag (→ Garmin), analyse laatste training, kerncijfers, top-inzichten, techniek-focus |
+| Overzicht | Doel (met aftelling bij een evenement), training voor vandaag (→ Garmin), analyse laatste training, kerncijfers, top-inzichten, techniek-focus |
+| Trainingsplan | Doel instellen (evenement met datum of algemeen), vaste trainingsdagen, deze week en volgende week met uitleg, fases tot de wedstrijd; elke dag naar Garmin |
 | Prestaties | VDOT-trend + projectie, Garmin VO2max, voorspelde tijden (model vs Garmin), beste stukken, lactaatdrempel, Endurance/Hill Score |
 | Training | Omvang, CTL/ATL/TSB, zones (HR/tempo), Training Effect, RPE vs belasting, scenario-schuif |
 | Herstel | Training Readiness, HRV met baseline, slaap(fasen), Body Battery, stress, rusthartslag, HR-herstel |
@@ -26,15 +27,18 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 | `store.py` | Lokale cache in `data/` |
 | `metrics.py` | VDOT, beste stukken, splits, efficiëntie, week- en dagreeksen |
 | `projection.py` | Trend, projectie, doel, scenario |
-| `analysis.py` | Analyse per training, techniek-focus, trainingssuggestie + Garmin-workout |
+| `analysis.py` | Analyse per training, techniek-focus, trainingssuggestie (volgt het plan, bijgestuurd op herstel) + Garmin-workout |
+| `plan.py` | Trainingsplan: fase, weekomvang, indeling over je dagen, uitleg, volgende week, bijsturen bij gemiste trainingen |
 | `insights.py` | Inzichten in gewone taal |
 | `app.py` (`build_payload`) + `static/index.html` | Server en dashboard |
-| `goal.json` | Je doel: `{"distance_km": 10, "time": "42:00"}` |
+| `goal.json` | Je doel: `{"type": "event", "distance_km": 21.1, "time": "1:45:00", "date": "2027-03-14", "name": "..."}` (tijd, datum en naam optioneel; `type: "general"` zonder datum) |
+| `settings.json` | `run_days`/`long_days` (0 = maandag), `plan_start` (begin 4-weekse cyclus), `home`, `hr_zones` |
 
 ## Hoe de cijfers tot stand komen
 - **VDOT (Daniels & Gilbert)** uit (bijna) maximale stukken en uit rustige runs via hartslagreserve, gekalibreerd op je echte inspanningen.
 - **Projectie**: gewogen trend van je week-VDOT (26 weken), max ~1 VDOT/maand, afvlakkend, met onzekerheidsband.
 - **Duurcorrectie**: vanaf 10 km geleidelijk extra tijd bij weinig km/week of korte lange duurlopen.
+- **Trainingsplan**: weekomvang = gemiddelde van 4 weken, +7%/week (max +10% boven je zwaarste recente week), elke 4e week −25% (algemeen doel). Bij een evenement: basis → opbouw → specifiek (4 weken) → taper (1/2/3 weken voor ≤10 km/halve/hele marathon) → wedstrijdweek. Lange duurloop 30–38% van de week (plafond per afstand), 1–2 kwaliteitstrainingen niet naast elkaar of naast de lange run, ±75–80% rustig. Een gemiste kwaliteitstraining schuift naar de eerstvolgende rustige dag met genoeg rust eromheen, anders vervalt hij.
 - **Garmin Connect** gaat via de onofficiële `garminconnect`-library; als Garmin iets wijzigt valt alleen dat deel weg.
 
 ## Looproutes

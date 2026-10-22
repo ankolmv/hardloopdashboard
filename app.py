@@ -20,6 +20,7 @@ import analysis
 import garmin_client
 import insights
 import metrics as M
+import plan as PL
 import projection as P
 import store
 from intervals_client import IntervalsError, load_env
@@ -71,6 +72,11 @@ def save_settings(body):
         s["hr_zones"] = body["hr_zones"]
     if isinstance(body.get("long_days"), list):
         s["long_days"] = sorted({int(d) for d in body["long_days"] if 0 <= int(d) <= 6})
+    if isinstance(body.get("run_days"), list):  # vaste trainingsdagen (0 = maandag)
+        days = sorted({int(d) for d in body["run_days"] if 0 <= int(d) <= 6})
+        if not 2 <= len(days) <= 7:
+            raise ValueError("Kies minstens 2 trainingsdagen.")
+        s["run_days"] = days
     if "home" in body:  # startpunt voor routes: [lat, lon]
         h = body["home"]
         try:
@@ -103,14 +109,17 @@ def _write_json(path, obj):
 
 
 def push_workout(body):
-    """Zet de suggestie voor `date` als workout in Garmin Connect en plan hem in.
+    """Zet de suggestie (of een geplande dag uit het trainingsplan) voor `date` als workout in Garmin Connect.
 
-    De server berekent de suggestie zelf opnieuw; een eerdere dashboard-workout op die datum wordt vervangen.
+    De server berekent alles zelf opnieuw; een eerdere dashboard-workout op die datum wordt vervangen.
     """
     p = build_payload()
     sug = p["overview"]["suggestion"]
     if not sug or sug["date"] != body.get("date"):
-        raise ValueError("De suggestie is intussen veranderd. Ververs het dashboard en probeer opnieuw.")
+        day = PL.planned_for(p.get("plan"), body.get("date"))
+        if not day or day["date"] < p["today"] or day.get("status") in ("done", "extra"):
+            raise ValueError("Deze training is intussen veranderd. Ververs het dashboard en probeer opnieuw.")
+        sug = {"date": day["date"], "title": day["title"], "steps": day["steps"], "why": [w for w in day["why"] if w]}
     if not sug["steps"]:
         raise ValueError("Voor een rustdag is er geen training om op je Garmin te zetten.")
     g = garmin_client.connect()
@@ -208,16 +217,38 @@ def load_goal():
 
 
 def save_goal(body):
+    """Doel: een evenement (met datum) of algemeen (bijv. 'snellere 10 km'); de doeltijd is optioneel."""
     try:
         km = float(str(body.get("distance_km")).replace(",", "."))
     except ValueError:
         km = 0
-    secs = parse_time(body.get("time"))
-    if not (1.5 <= km <= 100) or not secs:
-        raise ValueError("Geef een afstand tussen 1,5 en 100 km en een tijd zoals 45:00 of 1:45:00.")
-    goal = {"distance_km": km, "time": fmt_time(secs)}
+    if not 1.5 <= km <= 100:
+        raise ValueError("Geef een afstand tussen 1,5 en 100 km.")
+    goal = {"type": "event" if body.get("type") == "event" else "general", "distance_km": km}
+    if str(body.get("time") or "").strip():
+        secs = parse_time(body.get("time"))
+        if not secs:
+            raise ValueError("Geef de doeltijd zoals 45:00 of 1:45:00 (of laat hem leeg).")
+        goal["time"] = fmt_time(secs)
+    if goal["type"] == "event":
+        try:
+            date = dt.date.fromisoformat(str(body.get("date")))
+        except ValueError:
+            raise ValueError("Geef de datum van het evenement.")
+        if date < dt.date.today():
+            raise ValueError("De datum van het evenement ligt in het verleden.")
+        goal["date"] = date.isoformat()
+    name = str(body.get("name") or "").strip()[:60]
+    if name:
+        goal["name"] = name
+    old = load_goal() or {}
     with open(GOAL_PATH, "w", encoding="utf-8") as f:
         json.dump(goal, f, indent=2)
+    if (old.get("distance_km"), old.get("type"), old.get("date")) != (goal["distance_km"], goal["type"], goal.get("date")):
+        s = load_settings()  # nieuw doel: de 4-weekse cyclus begint deze week
+        s["plan_start"] = M.week_start(dt.date.today()).isoformat()
+        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(s, f, indent=2)
     return goal
 
 
@@ -351,7 +382,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     # ---------------- Doel
     goal = load_goal()
     goal_out = None
-    if goal and tr:
+    if goal and tr and goal.get("time"):
         D = goal["distance_km"] * 1000
         gs = P.goal_status(D, parse_time(goal["time"]), tr, avg_km, longest, today)
         goal_out = {**goal, **gs, "pace": fmt_time(parse_time(goal["time"]) / goal["distance_km"]),
@@ -361,6 +392,12 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
                              for h, p in gs["proj"].items()}}
     elif goal:
         goal_out = {**goal}
+        if tr:  # algemeen doel zonder tijd: wat het model nu verwacht
+            D = goal["distance_km"] * 1000
+            goal_out["pred"] = fmt_time(M.race_time(tr["now"], D) * (1 + P.endurance_penalty(D, avg_km, longest)))
+    if goal_out and goal.get("type") == "event" and goal.get("date"):
+        goal_out["days_to"] = (dt.date.fromisoformat(goal["date"]) - today).days
+        goal_out["weeks_to"] = (M.week_start(dt.date.fromisoformat(goal["date"])) - M.week_start(today)).days // 7
 
     # ---------------- Training
     km = km_override if km_override is not None else round(avg_km)
@@ -534,13 +571,26 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     if paces and model_rows:
         for r in runs_m:
             analyses[r["id"]] = analysis.analyze_session(r, runs_m, daily_by, model_rows, paces)
-    suggestion = None
-    if paces and model_rows and runs:
-        suggestion = analysis.suggest(runs_m, daily_by, model_rows, paces, today, tuple(settings.get("long_days", [4, 5, 6])))
-        for st in suggestion["steps"]:
+    def pace_txt(steps):
+        for st in steps:
             for s2 in ([st] if st["kind"] != "repeat" else st["steps"]):
                 if s2.get("pace"):
                     s2["pace_txt"] = f"{fmt_time(min(s2['pace']))}–{fmt_time(max(s2['pace']))}"
+
+    plan = None
+    if paces and model_rows and runs and tr:
+        plan = PL.build(runs_m, all_weeks, daily_by, model_rows, paces, tr["now"], today, goal, settings)
+        if plan:
+            pushed_all = load_pushed()
+            for w in (plan["this_week"], plan["next_week"]):
+                for d in w["days"]:
+                    pace_txt(d["steps"])
+                    pw = pushed_all.get(d["date"])
+                    d["pushed"] = bool(pw and pw.get("title") == d["title"])
+    suggestion = None
+    if paces and model_rows and runs:
+        suggestion = analysis.suggest(runs_m, daily_by, model_rows, paces, today, tuple(settings.get("long_days", [4, 5, 6])), plan)
+        pace_txt(suggestion["steps"])
         pushed = load_pushed().get(suggestion["date"])
         suggestion["pushed"] = pushed if pushed and pushed.get("title") == suggestion["title"] else None
         suggestion["pushed_other"] = pushed["title"] if pushed and pushed.get("title") != suggestion["title"] else None
@@ -594,7 +644,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         "today": today.isoformat(), "athlete": data["athlete"].get("name"), "meta": data["meta"],
         "garmin_linked": data.get("garmin_linked"), "mode": data["meta"].get("mode", "intervals"),
         "profile": paths.PROFILE, "period": period_weeks, "ctx": ctx,
-        "goal": goal_out, "overview": overview, "performance": perf, "training": training,
+        "goal": goal_out, "plan": plan, "overview": overview, "performance": perf, "training": training,
         "recovery": recovery, "technique": technique, "zones": zones, "activities": activities, "labels": M.RACE_LABELS,
         # Route: startpunt + afstand van de suggestie; de ORS-sleutel alleen lokaal (online zit hij versleuteld in cfg.enc)
         "route": {"home": settings.get("home"), "est_km": (suggestion or {}).get("est_km"),

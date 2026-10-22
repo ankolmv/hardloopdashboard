@@ -236,8 +236,9 @@ def technique_focus(runs, today):
 
 
 # --------------------------------------------------------------------------- suggestie voor vandaag
-def suggest(runs, daily_by, zones, paces, today, long_days=(4, 5, 6)):
-    """Eén concrete training voor vandaag (of morgen als je vandaag al gelopen hebt)."""
+def suggest(runs, daily_by, zones, paces, today, long_days=(4, 5, 6), plan=None):
+    """Eén concrete training voor vandaag (of morgen als je vandaag al gelopen hebt).
+    Met een trainingsplan volgt het voorstel het plan, bijgestuurd op je herstel."""
     ran_today = any(r["date"] == today.isoformat() for r in runs)
     day = today + dt.timedelta(days=1) if ran_today else today
     wd = day.weekday()
@@ -266,6 +267,60 @@ def suggest(runs, daily_by, zones, paces, today, long_days=(4, 5, 6)):
     if last:
         why.append(f"Laatste run: {TYPE_LABELS[classify(last)].lower()} op {DAYS_NL[dt.date.fromisoformat(last['date']).weekday()]}"
                    + (" (zwaar)" if is_hard(last) else ""))
+
+    planned = None
+    if plan:
+        import plan as PL
+        planned = PL.planned_for(plan, day.isoformat())
+    if planned:
+        kind, title, steps = planned["kind"], planned["title"], [dict(s) for s in planned["steps"]]
+        hard_plan = kind in PL.QUALITY or kind == "lang"
+        week = next(w for w in (plan["this_week"], plan["next_week"]) if planned in w["days"])
+        slot = PL.free_slot(week, planned)
+        moved = ("" if kind not in PL.QUALITY else f" {planned['title']} schuift door naar {slot['weekday']}." if slot
+                 else f" {planned['title']} vervalt deze week: er is geen dag meer over die niet naast een andere zware training ligt.")
+        if planned.get("moved_from"):
+            why.append(f"Volgens plan (verplaatst van {planned['moved_from']}): {title}.")
+        elif kind != "rust":
+            why.append(f"Volgens je trainingsplan: {title}.")
+        if readiness is not None and readiness < 30 and kind != "rust":
+            kind, title, steps = "rust", "Rustdag (herstel laag)", []
+            why.append(f"Je herstel is laag: {when} rust of hooguit 20–30 min wandelen levert het meeste op." + moved)
+        elif kind == "rust":
+            title = "Rustdag volgens plan"
+            why.append("Vandaag staat er geen training op je plan. Rust hoort bij de opbouw; wil je toch bewegen, "
+                       "wandel dan of loop hooguit 20–30 min heel rustig in Z1–Z2.")
+        elif hard_plan and ((readiness is not None and readiness < 45) or (acwr and acwr > 1.5)
+                            or (hard_yesterday and kind in PL.QUALITY)):
+            reason = ("je had gisteren een zware training" if hard_yesterday and kind in PL.QUALITY
+                      else f"je herstel is matig (Readiness {readiness})" if readiness is not None and readiness < 45
+                      else f"je belasting stijgt snel (ACWR {acwr:.2f})")
+            kind, title = "herstel", "Rustige herstelrun 30 min (Z2)"
+            why.append(f"Aangepast omdat {reason}: kort en rustig in Z2, onderste helft (±{z[1][0] + 5}–{z[1][0] + 17} bpm)." + moved)
+            steps = [{"kind": "run", "secs": 1800, "hr": hr(1), "pace": [paces["E_fast"], paces["E_slow"]],
+                      "label": "Rustig in Z2 (onderste helft)"}]
+        elif kind == "rustig" and readiness is not None and readiness < 45:
+            kind, title = "herstel", "Rustige herstelrun 30 min (Z2)"
+            why.append(f"Je herstel is matig (Readiness {readiness}): de rustige run wordt korter en extra rustig.")
+            steps = [{"kind": "run", "secs": 1800, "hr": hr(1), "pace": [paces["E_fast"], paces["E_slow"]],
+                      "label": "Rustig in Z2 (onderste helft)"}]
+        else:
+            if kind in PL.QUALITY and readiness is not None and readiness < 65:
+                for s in steps:
+                    if s["kind"] == "repeat" and s["n"] > 2:
+                        s["n"] -= 1
+                        title += " (1 herhaling minder)"
+                        why.append("Readiness is matig, dus één herhaling minder dan gepland.")
+                        break
+            why += [w for w in planned.get("why", []) if w]
+
+        def total(st):
+            return sum(s["secs"] if s["kind"] != "repeat" else s["n"] * total(s["steps"]) for s in st)
+
+        secs = total(steps)
+        return {"date": day.isoformat(), "for_today": not ran_today, "weekday": DAYS_NL[wd], "kind": kind, "title": title,
+                "why": why, "steps": steps, "minutes": round(secs / 60), "planned": planned["title"],
+                "est_km": round(PL._km(steps, paces), 1) if secs else 0}
 
     if readiness is not None and readiness < 30:
         kind, title = "rust", "Rustdag"
