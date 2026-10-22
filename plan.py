@@ -385,6 +385,21 @@ def _apply_actuals(week, runs, today, ctx):
         else:
             d["status"] = "planned" if d["kind"] != "rust" else "rest"
 
+    # Volgorde aanpassen aan wat je echt liep: drempel op de interval-dag gelopen? Dan wisselen die twee van plek
+    SWAP = ("kind", "title", "steps", "minutes", "km")
+    for d in week["days"]:
+        ak = (d.get("actual") or {}).get("kind")
+        if d.get("status") != "done" or ak == d["kind"] or ak not in QUALITY + ("lang",):
+            continue
+        other = next((x for x in week["days"] if x is not d and x["kind"] == ak
+                      and (x["status"] in ("planned", "today", "missed") or (x["status"] == "done" and x["actual"]["kind"] != ak))), None)
+        if not other:
+            continue
+        for k in SWAP:
+            d[k], other[k] = other[k], d[k]
+        d["why"] = [PURPOSE[d["kind"]], f"Je liep deze training op {d['weekday']}; het plan is daarop aangepast."]
+        other["why"] = [PURPOSE.get(other["kind"], ""), f"Omgewisseld met {d['weekday']}, omdat je daar al {AN.TYPE_LABELS.get(ak, ak).lower()} liep."]
+
     # Gemiste (of rustig gelopen) kwaliteitstraining doorschuiven naar de eerstvolgende geschikte rustige dag
     def skipped(x):
         return x["kind"] in QUALITY and (x["status"] == "missed" or (x["status"] == "done" and not x.get("hard")))
