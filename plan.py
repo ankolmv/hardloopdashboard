@@ -34,9 +34,8 @@ def _long_cap(km):
 
 
 def _cdist(a, b):
-    """Afstand tussen weekdagen, rond de week (zondag-maandag = 1)."""
-    d = abs(a - b) % 7
-    return min(d, 7 - d)
+    """Afstand in dagen. Dagen van de vorige week tellen als -7..-1 (zondag ervoor = -1)."""
+    return abs(a - b)
 
 
 def _fmt_km(x):
@@ -191,9 +190,12 @@ def _placement_why(day, kind, days_plan):
     if kind == "lang":
         return f"Op {DAYS[day]}: je lange run valt in het weekend (vrijdag–zondag), wanneer je er de tijd voor hebt."
     if kind == "rustig":
-        nxt = [d for d in hard if (d - day) % 7 == 1]
-        return f"Op {DAYS[day]}: rustig" + (", zodat je fris bent voor de zware training van morgen." if nxt else
-                                           " tussen de zware trainingen door; dat houdt de week in balans.")
+        if day - 1 in hard:
+            return (f"Op {DAYS[day]}: rustig, om te herstellen van de zware training van gisteren"
+                    + (" (zondag, vorige week)." if day == 0 else "."))
+        if day + 1 in hard:
+            return f"Op {DAYS[day]}: rustig, zodat je fris bent voor de zware training van morgen."
+        return f"Op {DAYS[day]}: rustig tussen de zware trainingen door; dat houdt de week in balans."
     return ""
 
 
@@ -204,9 +206,11 @@ def week_run_days(settings, week_start):
     return sorted(set(custom if custom else settings.get("run_days") or [1, 3, 5, 6])), bool(custom)
 
 
-def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=None, is_next=False, done=None):
+def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=None, is_next=False, done=None, prev_hard=None):
     """Weekplan. `done` = {weekdag: [runs]} voor dagen die al voorbij zijn (of vandaag al gelopen):
-    die liggen vast, de rest van de week wordt daarop afgestemd."""
+    die liggen vast, de rest van de week wordt daarop afgestemd.
+    `prev_hard` = {weekdag: soort} met de zware dagen van de week ervoor, zodat bijv. na een zware zondag
+    de maandag rustig blijft."""
     run_days, custom_days = week_run_days(settings, week_start)
     long_days = settings.get("long_days") or [4, 5, 6]
     goal_km = (goal or {}).get("distance_km") or 10
@@ -239,7 +243,8 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
     done_q_kinds = [done_kind[d] for d in done_hard if done_kind.get(d) in QUALITY]
     long_done = any(k == "lang" for k in done_kind.values())
     done_km = sum(r["km"] for rs in done.values() for r in rs)
-    fixed_hard = sorted(set(done_hard) | {d for d, k in done_kind.items() if k == "lang"})
+    prev_hard = prev_hard or {}
+    fixed_hard = sorted(set(done_hard) | {d for d, k in done_kind.items() if k == "lang"} | {d - 7 for d in prev_hard})
 
     # ---- dagen kiezen voor de rest van de week
     open_days = [d for d in run_days if d not in closed]
@@ -335,7 +340,7 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
             title, steps = _session("rustig", each, ctx, "strides" if d == strides else None)
             sessions[d] = ("rustig", title, steps)
 
-    all_kinds = {**days_plan, **done_kind}
+    all_kinds = {**{d - 7: k for d, k in prev_hard.items()}, **days_plan, **done_kind}
     days = []
     for d in range(7):
         date = week_start + dt.timedelta(days=d)
@@ -472,9 +477,18 @@ def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
     longest = max([r["km"] for r in runs if (today - dt.date.fromisoformat(r["date"])).days <= 28] or [8])
     ctx = {"z": z, "paces": paces, "goal_km": goal_km, "race_pace": rp, "max_recent_km": max_recent, "phase": None}
 
-    def week(ws, prev_target=None, is_next=False, done=None):
+    def week(ws, prev_target=None, is_next=False, done=None, prev_hard=None):
         ctx["phase"] = phase_for(goal, settings, ws)[0]
-        return plan_week(ws, base_km, longest, goal, settings, ctx, prev_target, is_next, done)
+        return plan_week(ws, base_km, longest, goal, settings, ctx, prev_target, is_next, done, prev_hard)
+
+    # Zware dagen van vorige week (echt gelopen), zodat deze week daarop aansluit
+    last_ws = this_ws - dt.timedelta(weeks=1)
+    hard_last = {}
+    for d in range(7):
+        rs = [r for r in runs if r["date"] == (last_ws + dt.timedelta(days=d)).isoformat()]
+        k = _main_kind(rs) if rs else None
+        if k in QUALITY + ("lang",) or any(AN.is_hard(r) for r in rs):
+            hard_last[d] = k
 
     # Wat er deze week al gebeurd is: dagen vóór vandaag liggen vast, vandaag ook als je al gelopen hebt
     ran_today = any(r["date"] == today.isoformat() for r in runs)
@@ -482,8 +496,8 @@ def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
     for d in range(today.weekday() + (1 if ran_today else 0)):
         date = (this_ws + dt.timedelta(days=d)).isoformat()
         done[d] = [r for r in runs if r["date"] == date]
-    orig = week(this_ws)  # het plan zoals het aan het begin van de week was (voor 'gemist')
-    w1 = week(this_ws, done=done)
+    orig = week(this_ws, prev_hard=hard_last)  # het plan zoals het aan het begin van de week was (voor 'gemist')
+    w1 = week(this_ws, done=done, prev_hard=hard_last)
     for d, o in zip(w1["days"], orig["days"]):
         if d["dow"] in done and o["kind"] != "rust":
             if d["status"] == "rest":  # geplande training niet gelopen
@@ -493,7 +507,10 @@ def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
     for d in w1["days"]:
         if d["dow"] not in done:
             d["status"] = ("today" if d["date"] == today.isoformat() else "planned") if d["kind"] != "rust" else "rest"
-    w2 = week(this_ws + dt.timedelta(weeks=1), prev_target=w1["target_km"] if w1["phase"] not in ("herstel", "taper", "race") else None, is_next=True)
+    hard_this = {d["dow"]: d["kind"] for d in w1["days"] if d.get("status") != "missed"
+                 and (d["kind"] in QUALITY + ("lang", "wedstrijd") or d.get("hard"))}
+    w2 = week(this_ws + dt.timedelta(weeks=1), prev_target=w1["target_km"] if w1["phase"] not in ("herstel", "taper", "race") else None,
+              is_next=True, prev_hard=hard_this)
     if w1["phase"] != w2["phase"]:
         w2["why"].insert(1, f"Volgende week verandert de fase: {w1['phase_label'].lower()} → {w2['phase_label'].lower()}.")
     timeline = None
