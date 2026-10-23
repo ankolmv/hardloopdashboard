@@ -7,6 +7,7 @@ en de instellingen: run_days (bijv. [1, 3, 5, 6]), long_days ([4, 5, 6]) en plan
 Trainingen hebben hetzelfde formaat als het dagvoorstel (analysis.suggest), zodat ze ook naar Garmin kunnen.
 """
 import datetime as dt
+import itertools
 import math
 import statistics
 
@@ -221,18 +222,26 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
     target = max(target, n * 4.0)
 
     # ---- dagen kiezen
-    cand_long = [d for d in (6, 5, 4) if d in run_days and d in long_days]
-    long_day = cand_long[0] if cand_long else run_days[-1]
+    cand_long = [d for d in (6, 5, 4) if d in run_days and d in long_days] or [run_days[-1]]
     n_q = 0 if phase == "herstel" else 1 if (n <= 3 or recovery or phase in ("taper", "race", "basis")) else 2
-    rest = [d for d in run_days if d != long_day]
-    q_days = []
-    for _ in range(n_q):
-        hard = [long_day] + q_days
-        options = [d for d in rest if d not in q_days]
+
+    # Alle combinaties (lange-run-dag + kwaliteitsdagen) bekijken: zo veel mogelijk rust tussen álle zware trainingen.
+    # Lukt het niet zonder twee zware dagen achter elkaar, dan liever één kwaliteitstraining minder.
+    def spread(ld, combo):
+        hard = (ld,) + combo
+        gaps = [_cdist(a, b) for a, b in itertools.combinations(hard, 2)] or [7]
+        return (min(gaps), sum(gaps), -cand_long.index(ld), -sum(combo))
+
+    q_dropped = False
+    for k in range(n_q, -1, -1):
+        options = [(ld, c) for ld in cand_long for c in itertools.combinations([d for d in run_days if d != ld], k)]
         if not options:
+            continue
+        long_day, combo = max(options, key=lambda o: spread(*o))
+        if spread(long_day, combo)[0] >= 2 or k <= 1:
             break
-        q_days.append(max(options, key=lambda d: (min(_cdist(d, h) for h in hard), -d)))
-    q_days.sort()
+        q_dropped = True
+    q_days = sorted(combo)
 
     # ---- soorten kwaliteit
     if phase == "basis":
@@ -313,7 +322,7 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
             "cycle_week": pinfo["cycle_week"], "weeks_to": pinfo["weeks_to"], "target_km": round(target, 1),
             "planned_km": round(planned_km, 1), "base_km": round(base_km, 1), "days": days,
             "sessions": sum(1 for x in days if x["kind"] != "rust"), "quality": len([x for x in days if x["kind"] in QUALITY]),
-            "easy_pct": 100 - hard_share}
+            "easy_pct": 100 - hard_share, "q_dropped": q_dropped}
     week["why"] = _week_why(week, phase, pinfo, recovery, goal, base_km, prev_target, is_next)
     return week
 
@@ -342,6 +351,9 @@ def _week_why(w, phase, pinfo, recovery, goal, base_km, prev_target, is_next):
                    + ". Max ~10% per week erbij voorkomt blessures.")
     out.append(f"{w['sessions']} trainingen, waarvan {w['quality']} kwaliteit; ±{w['easy_pct']}% van je looptijd is rustig. "
                f"Sterke duurlopers trainen ±80% rustig: de rustige runs maken de harde mogelijk.")
+    if w.get("q_dropped"):
+        out.append("Met jouw trainingsdagen passen twee kwaliteitstrainingen niet zonder twee zware dagen achter elkaar; "
+                   "daarom deze week één. Wil je er twee, kies dan dagen met telkens een dag ertussen.")
     keys = {x["kind"] for x in w["days"]}
     if "interval" in keys and "drempel" in keys:
         out.append("Kerntrainingen: intervallen (VO2max, je motor) en drempel (het tempo dat je lang volhoudt) — samen de basis voor een snellere " + gname + ".")
