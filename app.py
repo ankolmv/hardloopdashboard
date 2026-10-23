@@ -72,7 +72,22 @@ def save_settings(body):
         s["hr_zones"] = body["hr_zones"]
     if isinstance(body.get("long_days"), list):
         s["long_days"] = sorted({int(d) for d in body["long_days"] if 0 <= int(d) <= 6})
-    if isinstance(body.get("run_days"), list):  # vaste trainingsdagen (0 = maandag)
+    if body.get("week"):  # trainingsdagen voor één week (null = terug naar je vaste dagen)
+        try:
+            ws = M.week_start(dt.date.fromisoformat(str(body["week"])))
+        except ValueError:
+            raise ValueError("Ongeldige week.")
+        this_ws = M.week_start(dt.date.today())
+        wd = {k: v for k, v in (s.get("week_days") or {}).items() if k >= this_ws.isoformat()}  # oude weken opruimen
+        if isinstance(body.get("run_days"), list):
+            days = sorted({int(d) for d in body["run_days"] if 0 <= int(d) <= 6})
+            if not days:
+                raise ValueError("Kies minstens 1 trainingsdag.")
+            wd[ws.isoformat()] = days
+        else:
+            wd.pop(ws.isoformat(), None)
+        s["week_days"] = wd
+    elif isinstance(body.get("run_days"), list):  # vaste trainingsdagen (0 = maandag)
         days = sorted({int(d) for d in body["run_days"] if 0 <= int(d) <= 6})
         if not 2 <= len(days) <= 7:
             raise ValueError("Kies minstens 2 trainingsdagen.")

@@ -1159,7 +1159,7 @@ function renderPlan(){
   // ---- trainingsdagen
   let rd = [...P.run_days], ld = P.long_days.filter(d => rd.includes(d));
   const drawDays = () => {
-    $("#planDays").innerHTML = `<h3>Trainingsdagen</h3><p class="cap">${P.run_days_auto?"Nu afgeleid uit je laatste 8 weken. Vink je vaste dagen aan en sla op.":"Je vaste dagen; het plan verdeelt de trainingen hierover."}</p>
+    $("#planDays").innerHTML = `<h3>Vaste trainingsdagen</h3><p class="cap">${P.run_days_auto?"Nu afgeleid uit je laatste 8 weken. Vink je vaste dagen aan en sla op.":"Je standaardweek; het plan verdeelt de trainingen hierover."} Eén week anders? Gebruik de knop <b>Dagen</b> bij die week.</p>
       <div class="muted" style="font-size:12px;font-weight:600">Ik loop op</div>
       <div class="daypick" id="pdRun">${DSHORT.map((d,i)=>`<button data-d="${i}" class="${rd.includes(i)?"on":""}">${d}</button>`).join("")}</div>
       <div class="muted" style="font-size:12px;font-weight:600;margin-top:12px">Lange duurloop op</div>
@@ -1190,6 +1190,27 @@ function renderPlan(){
 
   $("#planThis").innerHTML = weekHtml(P.this_week, "Deze week", true);
   $("#planNext").innerHTML = weekHtml(P.next_week, "Volgende week", false);
+  // ---- trainingsdagen per week
+  [P.this_week, P.next_week].forEach(w => {
+    const box = $(`.wdPick[data-week="${w.start}"]`), btn = $(`.wdBtn[data-week="${w.start}"]`);
+    let sel = [...w.run_days];
+    const locked = d => w.days[d].status==="done" || w.days[d].status==="extra" || w.days[d].status==="missed" || (w.days[d].date < D.today);
+    const draw = () => {
+      box.innerHTML = `<div class="muted" style="font-size:12.5px">Op welke dagen loop je ${w.start===P.this_week.start?"deze":"volgende"} week? ${w.start===P.this_week.start?"Dagen die al voorbij zijn liggen vast; ":""}het plan deelt de rest opnieuw in.</div>
+        <div class="daypick">${DSHORT.map((d,i)=>`<button data-d="${i}" class="${sel.includes(i)?"on":""}" ${locked(i)?"disabled":""}>${d}</button>`).join("")}</div>
+        <div class="row" style="margin-top:12px"><button class="btn primary wdSave">Opslaan voor ${esc(w.label)}</button>
+          ${w.custom_days?`<button class="btn wdReset">Terug naar vaste dagen</button>`:""}<span class="muted wdMsg" style="font-size:12.5px"></span></div>`;
+      box.querySelectorAll(".daypick button").forEach(b => b.onclick = () => { const d = +b.dataset.d; sel = sel.includes(d) ? sel.filter(x=>x!==d) : [...sel, d].sort(); draw(); });
+      const msg = box.querySelector(".wdMsg");
+      const save = async body => {
+        try { const r = await api("/api/settings", body); if (r && r.queued) msg.textContent = "Wordt opgeslagen via GitHub (1–2 min)."; else await load(); }
+        catch(e){ msg.textContent = e.message; }
+      };
+      box.querySelector(".wdSave").onclick = () => { if (!sel.length) { msg.textContent = "Kies minstens 1 dag."; return; } save({week:w.start, run_days:sel}); };
+      box.querySelector(".wdReset") && (box.querySelector(".wdReset").onclick = () => save({week:w.start, run_days:null}));
+    };
+    btn.onclick = () => { const open = box.style.display==="none"; box.style.display = open ? "" : "none"; if (open) draw(); };
+  });
   $$(".ppush").forEach(b => b.onclick = async () => {
     const d = b.dataset.date, t = b.dataset.title;
     if (!confirm(`"${t}" op ${dayLabel(d)} in je Garmin-agenda zetten? Hij synchroniseert dan naar je horloge.`)) return;
@@ -1203,7 +1224,7 @@ function weekHtml(w, title, current){
   const sg = D.overview.suggestion;
   const statusBadge = d => d.status==="done" ? `<span class="badge green">✓ ${fmt(d.actual.km,1)} km</span>`
     : d.status==="extra" ? `<span class="badge blue">+ ${fmt(d.actual.km,1)} km</span>`
-    : d.status==="missed" ? (d.covered ? `<span class="badge blue">elders gedaan</span>` : `<span class="badge red">gemist</span>`)
+    : d.status==="missed" ? `<span class="badge red">gemist</span>`
     : d.status==="today" ? `<span class="badge orange">vandaag</span>` : d.pushed ? `<span class="badge green">op Garmin</span>` : "";
   const dl = svgI('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>').replace("<svg", '<svg width="15" height="15"');
   const dayRow = d => {
@@ -1230,7 +1251,9 @@ function weekHtml(w, title, current){
   const pc = css(PHASE_COL[w.phase] || "--blue");
   const tag = w.weeks_to!=null ? ` · nog ${w.weeks_to} wk` : w.phase!=="herstel" ? ` · week ${w.cycle_week}/4` : ` · week 4/4`;
   return `<div class="row between"><div><h3>${title} · ${esc(w.label)}</h3><p class="cap">${esc(w.range)}</p></div>
-      <span class="badge" style="color:${pc};background:color-mix(in srgb,${pc} 15%,transparent)">${esc(w.phase_label)}${tag}</span></div>
+      <div class="row"><span class="badge" style="color:${pc};background:color-mix(in srgb,${pc} 15%,transparent)">${esc(w.phase_label)}${tag}</span>
+        <button class="btn wdBtn" data-week="${w.start}">${svgI('<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>').replace("<svg",'<svg width="15" height="15"')}Dagen ${current?"deze":"volgende"} week${w.custom_days?" ✎":""}</button></div></div>
+    <div class="wdPick" data-week="${w.start}" style="display:none;margin:4px 0 12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--bg2)"></div>
     <div class="kv"><div><div class="k">Doel</div><div class="v tnum">±${fmt(w.target_km,0)} km</div></div>
       <div><div class="k">Gepland</div><div class="v tnum">${fmt(w.planned_km,0)} km</div></div>
       ${current?`<div><div class="k">Gelopen</div><div class="v tnum">${fmt(done,1)} km</div></div>`:""}

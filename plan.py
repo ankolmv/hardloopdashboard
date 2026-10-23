@@ -198,13 +198,23 @@ def _placement_why(day, kind, days_plan):
 
 
 # --------------------------------------------------------------------------- weekplan
-def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=None, is_next=False):
-    run_days = sorted(set(settings.get("run_days") or [1, 3, 5, 6]))
+def week_run_days(settings, week_start):
+    """Trainingsdagen voor een week: per week aangepast, anders je vaste dagen."""
+    custom = (settings.get("week_days") or {}).get(week_start.isoformat())
+    return sorted(set(custom if custom else settings.get("run_days") or [1, 3, 5, 6])), bool(custom)
+
+
+def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=None, is_next=False, done=None):
+    """Weekplan. `done` = {weekdag: [runs]} voor dagen die al voorbij zijn (of vandaag al gelopen):
+    die liggen vast, de rest van de week wordt daarop afgestemd."""
+    run_days, custom_days = week_run_days(settings, week_start)
     long_days = settings.get("long_days") or [4, 5, 6]
     goal_km = (goal or {}).get("distance_km") or 10
     phase, pinfo = phase_for(goal, settings, week_start)
     recovery = pinfo["recovery"]
     n = len(run_days)
+    done = done or {}
+    closed = set(done)  # dagen die vastliggen
 
     # ---- weekomvang
     ref = prev_target if prev_target else base_km
@@ -221,29 +231,48 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
         target = min(target, (ctx["max_recent_km"] if not prev_target else prev_target) * 1.10)
     target = max(target, n * 4.0)
 
-    # ---- dagen kiezen
-    cand_long = [d for d in (6, 5, 4) if d in run_days and d in long_days] or [run_days[-1]]
-    n_q = 0 if phase == "herstel" else 1 if (n <= 3 or recovery or phase in ("taper", "race", "basis")) else 2
+    # ---- wat is er al gedaan?
+    done_kind = {d: _main_kind(rs) for d, rs in done.items() if rs}
+    # kwaliteit gedaan = een zware run die geen lange duurloop is
+    done_hard = [d for d, rs in done.items() if done_kind.get(d) in QUALITY
+                 or (done_kind.get(d) not in ("lang",) and any(AN.is_hard(r) for r in rs))]
+    done_q_kinds = [done_kind[d] for d in done_hard if done_kind.get(d) in QUALITY]
+    long_done = any(k == "lang" for k in done_kind.values())
+    done_km = sum(r["km"] for rs in done.values() for r in rs)
+    fixed_hard = sorted(set(done_hard) | {d for d, k in done_kind.items() if k == "lang"})
 
-    # Alle combinaties (lange-run-dag + kwaliteitsdagen) bekijken: zo veel mogelijk rust tussen álle zware trainingen.
-    # Lukt het niet zonder twee zware dagen achter elkaar, dan liever één kwaliteitstraining minder.
+    # ---- dagen kiezen voor de rest van de week
+    open_days = [d for d in run_days if d not in closed]
+    n_q = 0 if phase == "herstel" else 1 if (n <= 3 or recovery or phase in ("taper", "race", "basis")) else 2
+    n_q_left = max(0, n_q - len(done_hard))
+    if long_done:
+        cand_long = [None]
+    else:
+        cand_long = [d for d in (6, 5, 4) if d in open_days and d in long_days] or ([open_days[-1]] if open_days else [None])
+
+    # Alle combinaties (lange-run-dag + kwaliteitsdagen) bekijken: zo veel mogelijk rust tussen álle zware trainingen,
+    # ook de trainingen die je al gedaan hebt. Lukt dat niet met een dag ertussen, dan liever een kwaliteitstraining minder.
     def spread(ld, combo):
-        hard = (ld,) + combo
+        hard = tuple(fixed_hard) + ((ld,) if ld is not None else ()) + combo
         gaps = [_cdist(a, b) for a, b in itertools.combinations(hard, 2)] or [7]
-        return (min(gaps), sum(gaps), -cand_long.index(ld), -sum(combo))
+        new = [x for x in ((ld,) if ld is not None else ()) + combo]
+        new_gaps = [_cdist(a, b) for a in new for b in hard if a != b] or [7]
+        return (min(new_gaps), min(gaps), sum(gaps), -cand_long.index(ld), -sum(combo))
 
     q_dropped = False
-    for k in range(n_q, -1, -1):
-        options = [(ld, c) for ld in cand_long for c in itertools.combinations([d for d in run_days if d != ld], k)]
+    long_day, combo = cand_long[0], ()
+    for k in range(n_q_left, -1, -1):
+        options = [(ld, c) for ld in cand_long for c in itertools.combinations([d for d in open_days if d != ld], k)]
         if not options:
             continue
         long_day, combo = max(options, key=lambda o: spread(*o))
-        if spread(long_day, combo)[0] >= 2 or k <= 1:
+        qgap = min([_cdist(q, h) for q in combo for h in tuple(fixed_hard) + ((long_day,) if long_day is not None else ()) + combo if q != h] or [7])
+        if qgap >= 2 or k == 0:
             break
         q_dropped = True
     q_days = sorted(combo)
 
-    # ---- soorten kwaliteit
+    # ---- soorten kwaliteit (wat je al deed eerst wegstrepen)
     if phase == "basis":
         q_kinds = ["drempel"]
     elif phase == "specifiek":
@@ -252,22 +281,28 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
         q_kinds = ["wedstrijdtempo" if goal_km <= 10.5 else "drempel"]
     else:
         q_kinds = ["interval", "drempel"] if goal_km <= 10.5 else ["drempel", "interval" if goal_km <= 25 else "wedstrijdtempo"]
+    todo = list(q_kinds)
+    for k in done_q_kinds:
+        if k in todo:
+            todo.remove(k)
+    todo = todo or list(q_kinds)
     variant = pinfo["cycle_week"] - 1
 
-    days_plan = {d: "rust" for d in range(7)}
-    for d in run_days:
+    days_plan = {d: "rust" for d in range(7) if d not in closed}
+    for d in open_days:
         days_plan[d] = "rustig"
-    days_plan[long_day] = "lang"
+    if long_day is not None:
+        days_plan[long_day] = "lang"
     for i, d in enumerate(q_days):
-        days_plan[d] = q_kinds[i % len(q_kinds)]
-    race_day = None
+        days_plan[d] = todo[i % len(todo)]
     if phase == "race" and goal and goal.get("date"):
         race_day = dt.date.fromisoformat(goal["date"]).weekday()
-        days_plan[race_day] = "wedstrijd"
-        for d in range(race_day + 1, 7):
-            days_plan[d] = "rust"
-        if long_day != race_day and days_plan.get(long_day) == "lang":
-            days_plan[long_day] = "rustig" if long_day < race_day - 1 else "rust"
+        if race_day not in closed:
+            days_plan[race_day] = "wedstrijd"
+            for d in range(race_day + 1, 7):
+                days_plan[d] = "rust"
+            if long_day is not None and long_day != race_day and days_plan.get(long_day) == "lang":
+                days_plan[long_day] = "rustig" if long_day < race_day - 1 else "rust"
 
     # ---- sessies bouwen
     sessions = {}
@@ -287,30 +322,45 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
             sessions[d] = (k, f"Wedstrijd: {goal.get('name') or _fmt_km(km) + ' km'}",
                            [{"kind": "warmup", "secs": 900, "label": "Inlopen + 4 versnellingen"},
                             {"kind": "interval", "secs": round(km * ctx["race_pace"]), "pace": [ctx["race_pace"] - 3, ctx["race_pace"] + 3], "label": "Wedstrijd"}])
-    used = sum(_km(s[2], ctx["paces"]) for s in sessions.values())
+    used = sum(_km(sv[2], ctx["paces"]) for sv in sessions.values())
     easy_days = [d for d, k in days_plan.items() if k == "rustig"]
     if easy_days:
-        each = max(5.0, min(long_km * 0.75, (target - used) / len(easy_days)))
+        each = max(5.0, min(long_km * 0.75, (target - done_km - used) / len(easy_days)))
         if phase == "race":
             each = min(each, 5.0)
         # versnellingen bij de rustige run die het verst van zware dagen ligt
-        hard = [d for d, k in days_plan.items() if k in QUALITY or k in ("lang", "wedstrijd")]
+        hard = [d for d, k in days_plan.items() if k in QUALITY or k in ("lang", "wedstrijd")] + fixed_hard
         strides = max(easy_days, key=lambda d: min((_cdist(d, h) for h in hard), default=7)) if phase != "herstel" else None
         for d in easy_days:
             title, steps = _session("rustig", each, ctx, "strides" if d == strides else None)
             sessions[d] = ("rustig", title, steps)
 
+    all_kinds = {**days_plan, **done_kind}
     days = []
     for d in range(7):
         date = week_start + dt.timedelta(days=d)
-        if d in sessions:
+        base = {"date": date.isoformat(), "weekday": DAYS[d], "dow": d}
+        if d in done:
+            rs = done[d]
+            k = done_kind.get(d, "rust")
+            if rs:
+                main = max(rs, key=lambda r: r["km"])
+                days.append({**base, "kind": k, "title": AN.TYPE_LABELS.get(k, k), "steps": [],
+                             "minutes": round(sum(r["minutes"] for r in rs)), "km": round(sum(r["km"] for r in rs), 1),
+                             "status": "done" if d in run_days else "extra", "hard": d in done_hard,
+                             "actual": {"km": round(sum(r["km"] for r in rs), 1), "name": main["name"], "kind": k,
+                                        "kind_label": AN.TYPE_LABELS.get(k, k)},
+                             "why": []})
+            else:
+                days.append({**base, "kind": "rust", "title": "Rust", "steps": [], "minutes": 0, "km": 0, "status": "rest", "why": []})
+        elif d in sessions:
             k, title, steps = sessions[d]
-            days.append({"date": date.isoformat(), "weekday": DAYS[d], "dow": d, "kind": k, "title": title, "steps": steps,
+            days.append({**base, "kind": k, "title": title, "steps": steps,
                          "minutes": round(_secs(steps) / 60), "km": round(_km(steps, ctx["paces"]), 1),
-                         "why": [PURPOSE.get(k, ""), _placement_why(d, k, days_plan)]})
+                         "why": [PURPOSE.get(k, ""), _placement_why(d, k, all_kinds)]})
         else:
-            days.append({"date": date.isoformat(), "weekday": DAYS[d], "dow": d, "kind": "rust", "title": "Rust",
-                         "steps": [], "minutes": 0, "km": 0, "why": [PURPOSE["rust"]] if d not in run_days else []})
+            days.append({**base, "kind": "rust", "title": "Rust", "steps": [], "minutes": 0, "km": 0,
+                         "why": [PURPOSE["rust"]] if d not in run_days else []})
 
     planned_km = sum(x["km"] for x in days)
     q_min = sum(x["minutes"] for x in days if x["kind"] in QUALITY)
@@ -322,9 +372,20 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
             "cycle_week": pinfo["cycle_week"], "weeks_to": pinfo["weeks_to"], "target_km": round(target, 1),
             "planned_km": round(planned_km, 1), "base_km": round(base_km, 1), "days": days,
             "sessions": sum(1 for x in days if x["kind"] != "rust"), "quality": len([x for x in days if x["kind"] in QUALITY]),
-            "easy_pct": 100 - hard_share, "q_dropped": q_dropped}
+            "easy_pct": 100 - hard_share, "q_dropped": q_dropped, "run_days": run_days, "custom_days": custom_days,
+            "done": {"km": round(done_km, 1), "quality": len(done_hard), "long": long_done, "q_left": len(q_days),
+                     "long_left": long_day is not None and days_plan.get(long_day) == "lang"} if done else None}
     week["why"] = _week_why(week, phase, pinfo, recovery, goal, base_km, prev_target, is_next)
     return week
+
+
+def _main_kind(rs):
+    """Soort training van een dag: de zwaarste run telt (kwaliteit > lang > rustig)."""
+    kinds = [AN.classify(r) for r in rs]
+    for k in ("interval", "drempel", "wedstrijdtempo", "lang"):
+        if k in kinds:
+            return k
+    return kinds[-1] if kinds else "rust"
 
 
 def _week_why(w, phase, pinfo, recovery, goal, base_km, prev_target, is_next):
@@ -351,6 +412,18 @@ def _week_why(w, phase, pinfo, recovery, goal, base_km, prev_target, is_next):
                    + ". Max ~10% per week erbij voorkomt blessures.")
     out.append(f"{w['sessions']} trainingen, waarvan {w['quality']} kwaliteit; ±{w['easy_pct']}% van je looptijd is rustig. "
                f"Sterke duurlopers trainen ±80% rustig: de rustige runs maken de harde mogelijk.")
+    dn = w.get("done")
+    if dn:
+        left = []
+        if dn["q_left"]:
+            left.append(f"nog {dn['q_left']} kwaliteitstraining{'en' if dn['q_left'] > 1 else ''}")
+        if dn["long_left"]:
+            left.append("de lange duurloop")
+        out.append(f"Al gedaan deze week: {_fmt_km(dn['km'])} km, {dn['quality']} zware training{'en' if dn['quality'] != 1 else ''}"
+                   + (", lange duurloop ✓" if dn["long"] else "") + ". De rest van de week is daarop afgestemd"
+                   + (f": {' en '.join(left)}, met een rustige dag naast elke zware training." if left else ": alleen nog rustige kilometers."))
+    if w.get("custom_days"):
+        out.append("Je hebt voor deze week andere trainingsdagen gekozen dan normaal.")
     if w.get("q_dropped"):
         out.append("Met jouw trainingsdagen passen twee kwaliteitstrainingen niet zonder twee zware dagen achter elkaar; "
                    "daarom deze week één. Wil je er twee, kies dan dagen met telkens een dag ertussen.")
@@ -376,79 +449,6 @@ def free_slot(week, d, counts=lambda x: True, statuses=("planned",)):
 
 
 
-def _apply_actuals(week, runs, today, ctx):
-    by_date = {}
-    for r in runs:
-        by_date.setdefault(r["date"], []).append(r)
-    hard_done = 0
-    for d in week["days"]:
-        acts = by_date.get(d["date"], [])
-        if acts:
-            km = round(sum(a["km"] for a in acts), 1)
-            kinds = [AN.classify(a) for a in acts]
-            d["actual"] = {"km": km, "name": acts[-1]["name"], "kind": kinds[-1], "kind_label": AN.TYPE_LABELS.get(kinds[-1], kinds[-1])}
-            d["status"] = "done" if d["kind"] != "rust" else "extra"
-            d["hard"] = any(AN.is_hard(a) for a in acts)
-            hard_done += sum(1 for a in acts if AN.is_hard(a))
-        elif d["date"] < today.isoformat():
-            d["status"] = "missed" if d["kind"] != "rust" else "rest"
-        elif d["date"] == today.isoformat():
-            d["status"] = "today" if d["kind"] != "rust" else "rest"
-        else:
-            d["status"] = "planned" if d["kind"] != "rust" else "rest"
-
-    # Volgorde aanpassen aan wat je echt liep: drempel op de interval-dag gelopen? Dan wisselen die twee van plek
-    SWAP = ("kind", "title", "steps", "minutes", "km")
-    for d in week["days"]:
-        ak = (d.get("actual") or {}).get("kind")
-        if d.get("status") != "done" or ak == d["kind"] or ak not in QUALITY + ("lang",):
-            continue
-        other = next((x for x in week["days"] if x is not d and x["kind"] == ak
-                      and (x["status"] in ("planned", "today", "missed") or (x["status"] == "done" and x["actual"]["kind"] != ak))), None)
-        if not other:
-            continue
-        for k in SWAP:
-            d[k], other[k] = other[k], d[k]
-        d["why"] = [PURPOSE[d["kind"]], f"Je liep deze training op {d['weekday']}; het plan is daarop aangepast."]
-        other["why"] = [PURPOSE.get(other["kind"], ""), f"Omgewisseld met {d['weekday']}, omdat je daar al {AN.TYPE_LABELS.get(ak, ak).lower()} liep."]
-
-    # Gemiste (of rustig gelopen) kwaliteitstraining doorschuiven naar de eerstvolgende geschikte rustige dag
-    def skipped(x):
-        return x["kind"] in QUALITY and (x["status"] == "missed" or (x["status"] == "done" and not x.get("hard")))
-
-    # harde runs op een dag zonder geplande kwaliteit (bijv. interval op een rustdag) tellen voor een overgeslagen training
-    spare = [x for x in week["days"] if x.get("hard") and x["kind"] not in QUALITY]
-    for d in week["days"]:
-        if not skipped(d):
-            continue
-        if spare:
-            x = spare.pop(0)
-            d["note"] = f"Gedaan op {x['weekday']} ({x['actual']['kind_label'].lower()})."
-            d["covered"] = True
-            continue
-        tgt = free_slot(week, d, lambda x: not skipped(x), ("planned", "today"))
-        if tgt:
-            tgt.update({k: d[k] for k in ("kind", "title", "steps", "minutes", "km")})
-            tgt["why"] = [PURPOSE[d["kind"]], f"Verplaatst van {d['weekday']} ({'gemist' if d['status'] == 'missed' else 'toen rustig gelopen'}), "
-                          "naar de eerste dag met genoeg rust eromheen."]
-            tgt["moved_from"] = d["weekday"]
-            d["note"] = f"Verplaatst naar {tgt['weekday']}"
-        else:
-            d["note"] = "Vervalt: deze week geen geschikte dag meer over (niet naast een andere zware training)."
-
-    # Al genoeg zwaar gelopen? Dan resterende kwaliteit omzetten naar rustig
-    planned_q = [x for x in week["days"] if x["kind"] in QUALITY and (not skipped(x) or x.get("covered"))]
-    left = [x for x in planned_q if x["status"] in ("planned", "today")]
-    allowed = max(0, len(planned_q) - hard_done)
-    easy_km = [x["km"] for x in week["days"] if x["kind"] == "rustig"] or [6.0]
-    for x in left[allowed:]:
-        title, steps = _session("rustig", statistics.median(easy_km), ctx)
-        x.update({"kind": "rustig", "title": title, "steps": steps, "minutes": round(_secs(steps) / 60),
-                  "km": round(_km(steps, ctx["paces"]), 1),
-                  "why": [PURPOSE["rustig"], "Omgezet naar rustig: je liep deze week al genoeg zware trainingen."]})
-    return week
-
-
 # --------------------------------------------------------------------------- hoofdingang
 def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
     if not (paces and zones and runs):
@@ -472,11 +472,27 @@ def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
     longest = max([r["km"] for r in runs if (today - dt.date.fromisoformat(r["date"])).days <= 28] or [8])
     ctx = {"z": z, "paces": paces, "goal_km": goal_km, "race_pace": rp, "max_recent_km": max_recent, "phase": None}
 
-    def week(ws, prev_target=None, is_next=False):
+    def week(ws, prev_target=None, is_next=False, done=None):
         ctx["phase"] = phase_for(goal, settings, ws)[0]
-        return plan_week(ws, base_km, longest, goal, settings, ctx, prev_target, is_next)
+        return plan_week(ws, base_km, longest, goal, settings, ctx, prev_target, is_next, done)
 
-    w1 = _apply_actuals(week(this_ws), runs, today, ctx)
+    # Wat er deze week al gebeurd is: dagen vóór vandaag liggen vast, vandaag ook als je al gelopen hebt
+    ran_today = any(r["date"] == today.isoformat() for r in runs)
+    done = {}
+    for d in range(today.weekday() + (1 if ran_today else 0)):
+        date = (this_ws + dt.timedelta(days=d)).isoformat()
+        done[d] = [r for r in runs if r["date"] == date]
+    orig = week(this_ws)  # het plan zoals het aan het begin van de week was (voor 'gemist')
+    w1 = week(this_ws, done=done)
+    for d, o in zip(w1["days"], orig["days"]):
+        if d["dow"] in done and o["kind"] != "rust":
+            if d["status"] == "rest":  # geplande training niet gelopen
+                d.update({"status": "missed", "kind": o["kind"], "title": o["title"], "steps": o["steps"],
+                          "minutes": o["minutes"], "km": o["km"], "why": [],
+                          "note": "Niet gelopen; de rest van de week is hierop aangepast."})
+    for d in w1["days"]:
+        if d["dow"] not in done:
+            d["status"] = ("today" if d["date"] == today.isoformat() else "planned") if d["kind"] != "rust" else "rest"
     w2 = week(this_ws + dt.timedelta(weeks=1), prev_target=w1["target_km"] if w1["phase"] not in ("herstel", "taper", "race") else None, is_next=True)
     if w1["phase"] != w2["phase"]:
         w2["why"].insert(1, f"Volgende week verandert de fase: {w1['phase_label'].lower()} → {w2['phase_label'].lower()}.")
