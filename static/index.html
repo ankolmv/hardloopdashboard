@@ -110,6 +110,12 @@ main{max-width:1320px;margin:0 auto;padding:20px 16px 48px}
 .goal-edit input{width:100%;background:rgba(255,255,255,.95);color:#14171c;border:0;border-radius:9px;padding:8px 10px;font-weight:600}
 .goal-edit .btn{background:#fff;color:var(--accent);border:0;justify-content:center;font-weight:700}
 .goal-edit .msg{font-size:12px;min-height:16px}
+.hero-chart{margin-top:20px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:12px 14px 8px}
+.hero-chart .hc-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.hero-chart .hc-head b{font-size:13px}
+.hero-chart .hc-head span{opacity:.85}
+.hero-chart .hc{position:relative;height:210px;margin-top:6px}
+@media (max-width:600px){.hero-chart .hc{height:180px}}
 .timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}
 .timeline div{background:rgba(255,255,255,.14);border-radius:10px;padding:8px 10px}
 .timeline .k{font-size:11px;opacity:.85;white-space:nowrap}
@@ -1110,6 +1116,11 @@ function renderOverview(){
   } else {
     $("#hero").innerHTML = `<div class="hero-grid"><div></div><div><div class="eyebrow">Jouw doel</div><div class="goal">Stel een doel in</div><p style="opacity:.9;margin:0">Kies op het tabblad Trainingsplan een evenement of een algemeen doel. Het plan en het dagvoorstel richten zich daarop.</p></div>${countdown}</div>`;
   }
+  if (g && g.series && g.series.hist.length + g.series.proj.length > 2){
+    $("#hero").insertAdjacentHTML("beforeend", `<div class="hero-chart"><div class="hc-head"><b>Voorspelde ${fmt(g.distance_km, g.distance_km%1?1:0)} km-tijd per week</b>
+      <span>terug: je vorm per week · vooruit: verwachting bij je huidige trend${g.series.goal_s?" · stippellijn = doel":""}</span></div><div class="hc"><canvas id="cGoal"></canvas></div></div>`);
+    renderGoalChart(g);
+  }
   $("#goalEdit").onclick = () => showTab("plan");
   POP = null; renderSuggestion(); renderRecoveryMini(); renderLastSession(); renderRouteCard();
   $("#focusMini").innerHTML = `<div class="row between"><div><h3>Focus techniek</h3><p class="cap">Waar je het meeste wint, en of het lukte in je laatste run (${esc(D.overview.tech_focus?.last_run?.name||"")})</p></div><button class="btn" id="focusMore">Meer</button></div>${focusHtml(D.overview.tech_focus, true)}`;
@@ -1159,6 +1170,27 @@ function renderOverview(){
     d.ontoggle = () => { store.set(`more_${k}`, d.open ? "1" : "0");
       if (d.open){ Object.values(charts).forEach(c => c.resize()); if (RT.map) setTimeout(() => RT.map.invalidateSize(), 60); } };
   });
+}
+function renderGoalChart(g){
+  const S = g.series, H = S.hist, PJ = S.proj;
+  const rows = [...H, ...PJ.filter(p => !H.some(h => h.week===p.week))];
+  const hb = Object.fromEntries(H.map(h=>[h.week,h])), pb = Object.fromEntries(PJ.map(p=>[p.week,p]));
+  const T = s => s==null ? "" : s>=3600 ? `${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,"0")}:${String(Math.round(s%60)).padStart(2,"0")}` : `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,"0")}`;
+  const W = "#ffffff", W2 = "rgba(255,255,255,.7)", GOAL = "#ffe27a";
+  const all = [...H.flatMap(h=>[h.t,h.fit]), ...PJ.flatMap(p=>[p.lo,p.hi]), S.goal_s].filter(v=>v!=null);
+  const span = Math.max(...all) - Math.min(...all), step = [15,30,60,120,300,600,900,1800].find(st => span/st <= 5) || 3600;
+  const o = opts({y:{reverse:true, grid:{color:"rgba(255,255,255,.15)"}, ticks:{color:W2, callback:v=>T(v), stepSize:step}},
+    x:{ticks:{color:W2, maxRotation:0, autoSkipPadding:14}},
+    extra:{plugins:{legend:{display:true, position:"bottom", labels:{color:W, boxWidth:8, boxHeight:8, usePointStyle:true, padding:12, filter:i=>!i.text.startsWith("band")}},
+      tooltip:{filter:i=>!i.dataset.label.startsWith("band") && i.raw!=null, callbacks:{title:weekTip(rows), label:c=>`${c.dataset.label}: ${T(c.raw)}`}}}}});
+  mk("cGoal", {type:"line", data:{labels:rows.map(r=>r.label), datasets:[
+    {label:"band", data:rows.map(r=>pb[r.week]?.hi??null), borderWidth:0, pointRadius:0, backgroundColor:"rgba(255,255,255,.18)", fill:"+1"},
+    {label:"band2", data:rows.map(r=>pb[r.week]?.lo??null), borderWidth:0, pointRadius:0},
+    {label:"Per week", data:rows.map(r=>hb[r.week]?.t??null), showLine:false, pointRadius:3.5, pointHoverRadius:5, pointBackgroundColor:W2, borderColor:W2},
+    {label:"Trend", data:rows.map(r=>hb[r.week]?.fit??null), borderColor:W, borderWidth:2.5, pointRadius:0, tension:.3, spanGaps:true},
+    {label:"Verwachting", data:rows.map(r=>pb[r.week]?.t??null), borderColor:W, borderWidth:2.5, borderDash:[6,5], pointRadius:0, tension:.3},
+    ...(S.goal_s ? [{label:`Doel ${g.time}`, data:rows.map(()=>S.goal_s), borderColor:GOAL, borderWidth:2, borderDash:[3,4], pointRadius:0}] : []),
+  ]}, options:o});
 }
 function renderRecoveryMini(){
   const r = D.recovery?.today || {}, K = D.overview.kpis, today = D.recovery?.days?.at(-1);

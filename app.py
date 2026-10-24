@@ -411,6 +411,17 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         if tr:  # algemeen doel zonder tijd: wat het model nu verwacht
             D = goal["distance_km"] * 1000
             goal_out["pred"] = fmt_time(M.race_time(tr["now"], D) * (1 + P.endurance_penalty(D, avg_km, longest)))
+    if goal_out and tr:  # doeltijd door de weken heen: terug (per week + trend) en vooruit (projectie met band)
+        Dg = goal["distance_km"] * 1000
+        pen = P.endurance_penalty(Dg, avg_km, longest)
+        gt = lambda v: round(M.race_time(v, Dg) * (1 + pen)) if v else None
+        fit = {f["week"]: f["fit"] for f in perf.get("trend_fit") or []}
+        goal_out["series"] = {
+            "hist": [{"week": w["week"], "label": w["label"], "range": w["range"], "t": gt(w.get("vdot")), "fit": gt(fit.get(w["week"]))}
+                     for w in perf.get("weeks") or []],
+            "proj": [{"week": x["week"], "label": x["label"], "range": x["range"], "t": gt(x["v"]), "lo": gt(x["hi"]), "hi": gt(x["lo"])}
+                     for x in perf.get("projection") or []],
+            "goal_s": parse_time(goal["time"]) if goal.get("time") else None}
     if goal_out and goal.get("type") == "event" and goal.get("date"):
         goal_out["days_to"] = (dt.date.fromisoformat(goal["date"]) - today).days
         goal_out["weeks_to"] = (M.week_start(dt.date.fromisoformat(goal["date"])) - M.week_start(today)).days // 7
