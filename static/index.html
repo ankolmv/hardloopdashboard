@@ -379,7 +379,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   <section class="view" data-view="training">
     <div class="grid tiles" id="trTiles"></div>
     <div class="grid g2">
-      <div class="card"><h3>Weekomvang</h3><p class="cap">Kilometers, langste run en hoogtemeters</p><div class="chart"><canvas id="cVol"></canvas></div></div>
+      <div class="card"><h3>Weekomvang</h3><p class="cap">Kilometers en langste run</p><div class="chart"><canvas id="cVol"></canvas></div></div>
       <div class="card"><h3>Belasting</h3><p class="cap">Fitheid (CTL), vermoeidheid (ATL) en vorm (TSB)</p><div class="chart"><canvas id="cLoad"></canvas></div></div>
     </div>
     <div class="grid g2">
@@ -1148,7 +1148,7 @@ function renderOverview(){
   const w = O.this_week, pct = w.avg_km ? Math.min(100, Math.round(w.km / w.avg_km * 100)) : 0;
   $("#thisWeek").innerHTML = `<h3>Deze week · ${esc(w.label||"")}</h3><p class="cap">${esc(w.range||"")}</p>
     <div class="kv"><div><div class="k">Kilometers</div><div class="v tnum">${fmt(w.km,1)}</div></div><div><div class="k">Runs</div><div class="v">${w.runs??0}</div></div>
-    <div><div class="k">Tijd</div><div class="v tnum">${hms((w.hours||0)*3600)}</div></div><div><div class="k">Belasting</div><div class="v">${w.load??0}</div></div><div><div class="k">Hoogtemeters</div><div class="v">${w.elev??0}</div></div></div>
+    <div><div class="k">Tijd</div><div class="v tnum">${hms((w.hours||0)*3600)}</div></div><div><div class="k">Belasting</div><div class="v">${w.load??0}</div></div></div>
     <p class="cap" style="margin:16px 0 6px">${pct}% van je gemiddelde week (${fmt(w.avg_km,1)} km)</p>
     <div style="height:10px;border-radius:999px;background:var(--chip);overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px"></div></div>
     <div style="margin-top:18px">${(() => { const wr = D.activities.filter(r => r.date >= w.week);
@@ -1402,14 +1402,13 @@ function renderTraining(){
   $("#trTiles").innerHTML = [
     tile("Trainingsstatus", st.training_status ? esc(prettify(st.training_status)) : "–", D.garmin_linked?(st.load_focus?esc(prettify(st.load_focus)):""):"koppel Garmin", "--accent"),
     tile("Acuut / chronisch", st.acwr ? fmt(st.acwr,2) : "–", "Garmin, 0,8–1,5 is gezond", "--orange"),
-    tile("Km deze week", fmt(last.km,1), `${last.runs||0} runs · ${last.elev||0} hm`, "--blue", W.map(w=>w.km)),
+    tile("Km deze week", fmt(last.km,1), `${last.runs||0} runs`, "--blue", W.map(w=>w.km)),
     tile(`Rustig (${D.zones.easy_label})`, last.z_low!=null?last.z_low+"%":"–", "van je looptijd deze week", "--green", W.map(w=>w.z_low)),
   ].join("");
   mk("cVol", {data:{labels:W.map(w=>w.label), datasets:[
     {type:"bar", label:"Km", data:W.map(w=>w.km), backgroundColor:alpha(css("--accent"),.85), borderRadius:6, maxBarThickness:34, order:2},
     {type:"line", label:"Langste run", data:W.map(w=>w.longest||null), borderColor:css("--blue"), pointRadius:3, tension:.3, order:1},
-    {type:"line", label:"Hoogtemeters", data:W.map(w=>w.elev), borderColor:css("--teal"), borderDash:[4,3], pointRadius:0, yAxisID:"y1", order:0},
-  ]}, options:opts({tooltipTitle:weekTip(W), y:{title:{display:true,text:"km"}}, y1:{title:{display:true,text:"m"}}})});
+  ]}, options:opts({tooltipTitle:weekTip(W), y:{title:{display:true,text:"km"}}})});
   const L = T.load, ld = L.map(x=>x.date);
   mk("cLoad", {data:{labels:ld, datasets:[
     {type:"bar", label:"Vorm (TSB)", data:L.map(x=>x.tsb), backgroundColor:L.map(x=>x.tsb<0?alpha(css("--orange"),.45):alpha(css("--green"),.45)), borderRadius:2},
@@ -1658,7 +1657,7 @@ async function openRun(id){
   $("#dBody").innerHTML = (r.analysis ? `<div class="card"><h3>Analyse</h3><p class="cap">Wat er gebeurde, waarom, en wat je volgende keer anders kunt doen</p>${sessionBlock(r.analysis, true)}</div>` : "") + `<div class="card"><div class="kv">
       ${kv("Afstand", fmt(r.km,2)+" km")}${kv("Tijd", hms(r.minutes*60))}${kv("Tempo", mmss(r.pace_s_km)+"/km")}${kv("GAP", r.gap_s_km?mmss(r.gap_s_km)+"/km":null)}
       ${kv("Hartslag", r.avg_hr?`${r.avg_hr} / ${r.max_hr??"–"}`:null)}${kv("Vermogen", r.power?`${r.power} W (NP ${r.np??"–"})`:null)}${kv("Cadans", r.cadence?fmt(r.cadence,0)+" spm":null)}
-      ${kv("Hoogtemeters", r.elev)}${kv("Belasting", r.load)}${kv("TRIMP", r.trimp)}${kv("RPE / gevoel", r.rpe?`${r.rpe} / ${r.feel??"–"}`:null)}
+      ${kv("Belasting", r.load)}${kv("TRIMP", r.trimp)}${kv("RPE / gevoel", r.rpe?`${r.rpe} / ${r.feel??"–"}`:null)}
       ${kv("Training Effect", r.te_aerobic!=null?`${fmt(r.te_aerobic,1)} / ${fmt(r.te_anaerobic,1)}`:null)}${kv("HR-herstel 60 s", r.hrr60?r.hrr60+" slagen":null)}
       ${kv("VDOT", r.vdot_race?fmt(r.vdot_race,1)+" ◆":r.vdot_hr_cal?"~"+fmt(r.vdot_hr_cal,1):null)}${kv("Ontkoppeling", r.decoupling!=null?r.decoupling+"%":null)}${kv("Calorieën", r.calories)}${kv("Stamina einde", r.stamina_end!=null?r.stamina_end+"%":null)}
     </div>${r.intervals?.length?`<p class="cap" style="margin:12px 0 0">Intervallen: ${r.intervals.map(esc).join(" · ")}</p>`:""}</div>
@@ -1669,10 +1668,9 @@ async function openRun(id){
     const col = {pace:"--accent", hr:"--red", cadence:"--teal", watts:"--purple"}[k];
     mk("cRun", {data:{labels:det.distance, datasets:[
       {type:"line", label:{pace:"Tempo", hr:"Hartslag", cadence:"Cadans", watts:"Vermogen"}[k], data:det[k], borderColor:css(col), borderWidth:1.8, pointRadius:0, tension:.2, spanGaps:true},
-      {type:"line", label:"Hoogte", data:det.altitude, borderWidth:0, backgroundColor:alpha(css("--faint"),.18), fill:"origin", pointRadius:0, yAxisID:"y1"},
     ]}, options:opts({legend:false, tooltipTitle:safeTitle(i=>`${det.distance[i[0].dataIndex]} km`), x:{ticks:{maxTicksLimit:10, callback:(v,i)=>det.distance[i]?.toFixed(0)+" km"}},
       y:k==="pace"?{reverse:true, ticks:{callback:v=>mmss(v)}, suggestedMin:180, suggestedMax:480}:{}, y1:{display:false},
-      extra:{plugins:{legend:{display:false}, tooltip:{callbacks:{title:safeTitle(i=>`${det.distance[i[0].dataIndex]} km`), label:c=>c.dataset.label==="Hoogte"?`Hoogte ${Math.round(c.raw)} m`:k==="pace"?`Tempo ${mmss(c.raw)}/km`:`${c.dataset.label} ${c.raw}`}}}}})});
+      extra:{plugins:{legend:{display:false}, tooltip:{callbacks:{title:safeTitle(i=>`${det.distance[i[0].dataIndex]} km`), label:c=>k==="pace"?`Tempo ${mmss(c.raw)}/km`:`${c.dataset.label} ${c.raw}`}}}}})});
   };
   draw("pace");
   $$("#dSeg button").forEach(b => b.onclick = () => { $$("#dSeg button").forEach(x=>x.classList.toggle("on", x===b)); draw(b.dataset.k); });
@@ -1680,9 +1678,9 @@ async function openRun(id){
 function splitsTable(S){
   if (!S.length) return '<tbody><tr><td class="muted">Geen splits.</td></tr></tbody>';
   const best = Math.min(...S.map(s=>s.time)), worst = Math.max(...S.map(s=>s.time));
-  return `<thead><tr><th>Km</th><th>Tijd</th><th></th><th>HR</th><th>Cadans</th><th>W</th><th>Hoogte</th></tr></thead><tbody>` + S.map(s=>{
+  return `<thead><tr><th>Km</th><th>Tijd</th><th></th><th>HR</th><th>Cadans</th><th>W</th></tr></thead><tbody>` + S.map(s=>{
     const w = worst>best ? 30 + 70*(worst - s.time)/(worst-best) : 100;
-    return `<tr><td>${s.km}</td><td><b>${mmss(s.time)}</b></td><td style="width:30%"><div style="height:6px;border-radius:9px;background:var(--chip)"><div style="height:100%;width:${w}%;border-radius:9px;background:${s.time===best?css("--green"):css("--accent")}"></div></div></td><td>${s.hr??"–"}</td><td>${s.cadence??"–"}</td><td>${s.watts??"–"}</td><td>${s.elev!=null?(s.elev>0?"+":"")+s.elev:"–"}</td></tr>`;
+    return `<tr><td>${s.km}</td><td><b>${mmss(s.time)}</b></td><td style="width:30%"><div style="height:6px;border-radius:9px;background:var(--chip)"><div style="height:100%;width:${w}%;border-radius:9px;background:${s.time===best?css("--green"):css("--accent")}"></div></div></td><td>${s.hr??"–"}</td><td>${s.cadence??"–"}</td><td>${s.watts??"–"}</td></tr>`;
   }).join("") + "</tbody>";
 }
 function closeDrawer(){ $("#drawer").classList.remove("on"); $("#drawerBg").classList.remove("on"); }
