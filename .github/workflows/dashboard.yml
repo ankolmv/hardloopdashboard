@@ -2,11 +2,13 @@ name: Dashboard
 
 on:
   schedule:
-    - cron: "7,37 * * * *"   # elk halfuur (GitHub slaat geplande runs soms over)
+    # UTC: overdag (±6–23 uur NL) elke 10 min, 's nachts elk uur. GitHub slaat geplande runs soms over.
+    - cron: "*/10 4-21 * * *"
+    - cron: "7 0-3,22,23 * * *"
   workflow_dispatch:
     inputs:
       action:
-        description: "Actie (sync, goal, settings, push_workout, unpush_workout, garmin_zones)"
+        description: "Actie (sync, goal, settings, push_workout, unpush_workout, garmin_zones, fail_test)"
         required: false
         default: "sync"
       args:
@@ -70,11 +72,19 @@ jobs:
         run: python cloud.py sync
 
       - name: Site bouwen
+        id: site
         env:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           ACTIONS_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
           ORS_KEY: ${{ secrets.ORS_KEY }}
         run: python cloud.py build site
+
+      - name: Meldingen
+        continue-on-error: true   # een mislukte melding mag de site niet tegenhouden
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          ACTIONS_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
+        run: python cloud.py notify
 
       - name: Cache versleuteld opslaan
         env:
@@ -90,8 +100,19 @@ jobs:
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" state
 
       - uses: actions/upload-pages-artifact@v3
+        if: steps.site.outputs.changed == 'true'
         with:
           path: site
 
       - id: deploy
+        if: steps.site.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
+
+      - name: Melding bij mislukte run
+        if: failure()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$NTFY_TOPIC" ] && exit 0
+          curl -s -H "Content-Type: application/json" -d "{\"topic\":\"$NTFY_TOPIC\",\"title\":\"Dashboard-run mislukt\",\"message\":\"De laatste update van je dashboard is mislukt. Tik voor de details.\",\"tags\":[\"x\"],\"priority\":4,\"click\":\"$RUN_URL\"}" https://ntfy.sh/ > /dev/null

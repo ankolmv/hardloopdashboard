@@ -20,6 +20,7 @@ import analysis
 import garmin_client
 import insights
 import metrics as M
+import notify
 import plan as PL
 import projection as P
 import store
@@ -596,6 +597,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     if paces and model_rows and runs and tr:
         plan = PL.build(runs_m, all_weeks, daily_by, model_rows, paces, tr["now"], today, goal, settings)
         if plan:
+            plan["reviews"] = list(reversed(notify.load_reviews()[-12:]))  # wekelijkse terugblikken
             pushed_all = load_pushed()
             for w in (plan["this_week"], plan["next_week"]):
                 for d in w["days"]:

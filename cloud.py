@@ -4,7 +4,8 @@ Stappen in de workflow:
   python cloud.py restore             # versleutelde cache (state.enc) terugzetten + secrets -> .env / Garmin-token
   python cloud.py action <naam> <json> # optioneel: actie vanaf de website (doel, Garmin-push, zones, instellingen)
   python cloud.py sync                # intervals.icu + Garmin ophalen
-  python cloud.py build site          # statische site met versleutelde data
+  python cloud.py build site          # statische site met versleutelde data (+ of er iets veranderd is)
+  python cloud.py notify              # meldingen via ntfy (ochtend, nieuwe run, terugblik, storingen)
   python cloud.py save                # cache versleuteld opslaan in state.enc
 
 Versleuteling: AES-256-GCM. Site-data met een sleutel uit DASHBOARD_PASSWORD (PBKDF2-SHA256),
@@ -103,6 +104,8 @@ def action(name, args_json):
           "unpush_workout": app.unpush_workout, "garmin_zones": app.set_garmin_zones}.get(name)
     if name in ("", "sync"):
         return
+    if name == "fail_test":  # om de melding bij een mislukte run te testen
+        sys.exit("Bewust mislukte testrun")
     if not fn:
         sys.exit(f"Onbekende actie: {name}")
     print(f"Actie {name}: {fn(args)}")
@@ -132,12 +135,14 @@ def build(out):
             f.write(_encrypt(key, raw))
 
     base = None
+    fingerprint = hashlib.sha256()
     for weeks in PERIODS:
         # Beide zonebronnen vooraf bouwen: wisselen Model/Garmin gebeurt dan direct in de browser
         for src in ("model", "garmin"):
             p = app.build_payload(weeks, hr_zones=src)
             put(f"dash-{weeks}-{src}.enc", p)
             base = base or p
+            fingerprint.update(json.dumps({**p, "meta": {**p["meta"], "synced_at": None}}, sort_keys=True, default=str).encode())
         put(f"dash-{weeks}.enc", app.build_payload(weeks))  # volgens opgeslagen instelling
     # Scenario-schuif: alleen de scenario-sectie verschilt per km/week
     put("scenarios.enc", {km: app.build_payload(12, km)["training"]["scenario"] for km in KM_STEPS})
@@ -165,6 +170,26 @@ def build(out):
     store_meta = store.load()["meta"]
     print(f"Site gebouwd in {out} (sync {store_meta.get('synced_at')})")
 
+    # Alleen opnieuw publiceren als er iets veranderd is (data, pagina, sleutels), of minstens elk uur
+    fingerprint.update(html.encode())
+    fingerprint.update(json.dumps([os.environ.get("ACTIONS_TOKEN"), os.environ.get("ORS_KEY")]).encode())
+    digest, now = fingerprint.hexdigest(), dt.datetime.now()
+    last_path = os.path.join(paths.DATA, "site_deploy.json")
+    try:
+        with open(last_path, encoding="utf-8") as f:
+            last = json.load(f)
+    except (OSError, ValueError):
+        last = {}
+    stale = not last.get("at") or now - dt.datetime.fromisoformat(last["at"]) >= dt.timedelta(minutes=55)
+    changed = digest != last.get("hash") or stale
+    if changed:
+        with open(last_path, "w", encoding="utf-8") as f:
+            json.dump({"hash": digest, "at": now.isoformat(timespec="seconds")}, f)
+    print("Publiceren:", "ja" if changed else "nee, niets veranderd")
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+            f.write(f"changed={'true' if changed else 'false'}\n")
+
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -177,6 +202,10 @@ if __name__ == "__main__":
         print(store.sync())
     elif cmd == "action":
         action(sys.argv[2] if len(sys.argv) > 2 else "", sys.argv[3] if len(sys.argv) > 3 else "{}")
+    elif cmd == "notify":
+        import app
+        import notify
+        notify.run(app.build_payload())
     elif cmd == "build":
         build(sys.argv[2] if len(sys.argv) > 2 else "site")
     else:

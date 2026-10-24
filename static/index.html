@@ -160,6 +160,24 @@ main{max-width:1320px;margin:0 auto;padding:20px 16px 48px}
 .focus-item .drill{font-size:12.5px;color:var(--muted)}
 .focus-item .res{margin-top:10px;font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
+/* ---------- overzicht: inklapbaar onder 'Meer' ---------- */
+.more{display:grid;gap:10px}
+.more>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--shadow)}
+.more>summary::-webkit-details-marker{display:none}
+.more>summary b{font-size:14px;font-weight:650}
+.more>summary .hint{color:var(--muted);font-size:12.5px;margin-left:auto;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.more>summary .chev{transition:transform .2s;color:var(--muted);flex:none}
+.more[open]>summary .chev{transform:rotate(180deg)}
+.morelist{display:grid;gap:10px}
+.rec-mini{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
+.rec-mini div{background:var(--bg2);border-radius:12px;padding:10px 12px}
+.rec-mini .k{font-size:11.5px;color:var(--muted);font-weight:600}
+.rec-mini .v{font-size:20px;font-weight:750}
+.rec-mini .v small{font-size:12px;color:var(--muted);font-weight:600;margin-left:3px}
+.review{border:1px solid var(--line);border-radius:14px;background:var(--bg2);padding:4px 14px}
+.review>summary{cursor:pointer;padding:10px 0;font-weight:650;display:flex;justify-content:space-between;gap:10px}
+.review ul{margin:0 0 12px;padding-left:18px;display:grid;gap:4px;font-size:13px}
+
 /* ---------- trainingsplan ---------- */
 .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
 .form-grid label{font-size:11.5px;color:var(--muted);font-weight:600;display:grid;gap:4px}
@@ -312,6 +330,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="card" id="planTimeline" style="display:none"></div>
     <div class="card" id="planThis"></div>
     <div class="card" id="planNext"></div>
+    <div class="card" id="planReviews" style="display:none"></div>
   </section>
 
   <!-- OVERZICHT -->
@@ -319,15 +338,27 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="hero" id="hero"><div class="skeleton" style="min-height:180px;opacity:.3"></div></div>
     <div class="grid g2">
       <div class="card" id="sugCard"></div>
-      <div class="card" id="lastCard"></div>
+      <div class="card" id="recCard"></div>
     </div>
-    <div class="card" id="routeCard"></div>
-    <div class="grid tiles" id="tiles"></div>
-    <div class="grid g2">
-      <div class="card"><div class="row between"><div><h3>Inzichten</h3><p class="cap">Automatisch uit je data, per categorie</p></div><div class="chips" id="insChips"></div></div><div class="ins" id="insights"></div></div>
-      <div class="card" id="thisWeek"></div>
+    <div class="card" id="lastCard"></div>
+    <div class="section-title">Meer</div>
+    <div class="morelist">
+      <details class="more" data-k="route"><summary><b>Looproute</b><span class="hint" id="hint-route"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="card" id="routeCard"></div>
+      </details>
+      <details class="more" data-k="tiles"><summary><b>Kerncijfers</b><span class="hint" id="hint-tiles"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="grid tiles" id="tiles"></div>
+      </details>
+      <details class="more" data-k="insights"><summary><b>Inzichten</b><span class="hint" id="hint-insights"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="card"><div class="row between"><div><h3>Inzichten</h3><p class="cap">Automatisch uit je data, per categorie</p></div><div class="chips" id="insChips"></div></div><div class="ins" id="insights"></div></div>
+      </details>
+      <details class="more" data-k="week"><summary><b>Deze week</b><span class="hint" id="hint-week"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="card" id="thisWeek"></div>
+      </details>
+      <details class="more" data-k="focus"><summary><b>Focus techniek</b><span class="hint" id="hint-focus"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="card" id="focusMini"></div>
+      </details>
     </div>
-    <div class="card" id="focusMini"></div>
   </section>
 
   <!-- PRESTATIES -->
@@ -1080,7 +1111,7 @@ function renderOverview(){
     $("#hero").innerHTML = `<div class="hero-grid"><div></div><div><div class="eyebrow">Jouw doel</div><div class="goal">Stel een doel in</div><p style="opacity:.9;margin:0">Kies op het tabblad Trainingsplan een evenement of een algemeen doel. Het plan en het dagvoorstel richten zich daarop.</p></div>${countdown}</div>`;
   }
   $("#goalEdit").onclick = () => showTab("plan");
-  POP = null; renderSuggestion(); renderLastSession(); renderRouteCard();
+  POP = null; renderSuggestion(); renderRecoveryMini(); renderLastSession(); renderRouteCard();
   $("#focusMini").innerHTML = `<div class="row between"><div><h3>Focus techniek</h3><p class="cap">Waar je het meeste wint, en of het lukte in je laatste run (${esc(D.overview.tech_focus?.last_run?.name||"")})</p></div><button class="btn" id="focusMore">Meer</button></div>${focusHtml(D.overview.tech_focus, true)}`;
   $("#focusMore").onclick = () => showTab("techniek");
 
@@ -1114,6 +1145,36 @@ function renderOverview(){
     <div style="margin-top:18px">${(() => { const wr = D.activities.filter(r => r.date >= w.week);
       return wr.length ? wr.map(actRow).join("") : `<div class="empty">Nog geen runs deze week.</div>`; })()}</div>`;
   bindActs("#thisWeek");
+
+  // ---- korte hints in de ingeklapte koppen + open/dicht onthouden per apparaat
+  const sg = O.suggestion, ins = O.insights || [];
+  const hints = {route: sg?.est_km ? `±${fmt(sg.est_km,1)} km vanaf je startpunt` : "rondje of heen-en-terug",
+    tiles: [K.vdot.value!=null?`VDOT ${fmt(K.vdot.value,1)}`:null, K.km.value!=null?`${fmt(K.km.value,1)} km/week`:null, K.ctl.value!=null?`CTL ${fmt(K.ctl.value,0)}`:null].filter(Boolean).join(" · "),
+    insights: `${ins.length} inzichten${ins.filter(i=>i.tone==="warn").length?` · ${ins.filter(i=>i.tone==="warn").length} aandachtspunt(en)`:""}`,
+    week: `${fmt(w.km||0,1)} km · ${w.runs??0} runs`,
+    focus: (O.tech_focus?.focus||[]).map(f=>f.label).join(", ") || "geen aandachtspunten"};
+  $$(".morelist .more").forEach(d => {
+    const k = d.dataset.k; $(`#hint-${k}`).textContent = hints[k] || "";
+    d.open = store.get(`more_${k}`, "0") === "1";
+    d.ontoggle = () => { store.set(`more_${k}`, d.open ? "1" : "0");
+      if (d.open){ Object.values(charts).forEach(c => c.resize()); if (RT.map) setTimeout(() => RT.map.invalidateSize(), 60); } };
+  });
+}
+function renderRecoveryMini(){
+  const r = D.recovery?.today || {}, K = D.overview.kpis, today = D.recovery?.days?.at(-1);
+  const fresh = today && today.date === D.today;
+  const lvl = {HIGH:"hoog", MODERATE:"gemiddeld", LOW:"laag", POOR:"slecht", PRIME:"top"}[r.readiness_level] || (r.readiness_level||"").toLowerCase();
+  const cls = r.readiness>=60 ? "green" : r.readiness>=40 ? "orange" : "red";
+  $("#recCard").innerHTML = `<div class="row between"><div><div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Herstel${fresh?" · vandaag":today?` · ${dayLabel(today.date)}`:""}</div>
+      <h3 style="margin-top:2px">${r.readiness!=null?`Training Readiness <span class="badge ${cls}">${r.readiness} · ${esc(lvl)}</span>`:"Nog geen herstelgegevens"}</h3></div>
+      <button class="btn" id="recMore">Herstel</button></div>
+    <div class="rec-mini">
+      <div><div class="k">Slaap</div><div class="v tnum">${r.sleep_h?fmt(r.sleep_h,1):"–"}<small>u${r.sleep_score?` · score ${fmt(r.sleep_score,0)}`:""}</small></div></div>
+      <div><div class="k">HRV</div><div class="v tnum">${r.hrv!=null?fmt(r.hrv,0):"–"}<small>ms${r.hrv_status?` · ${esc(prettify(r.hrv_status).toLowerCase())}`:""}</small></div></div>
+      <div><div class="k">Body Battery nu</div><div class="v tnum">${r.bb_now??"–"}${r.bb_now_time?`<small>om ${r.bb_now_time}</small>`:""}</div></div>
+      <div><div class="k">Rusthartslag</div><div class="v tnum">${r.rhr??"–"}<small>bpm</small></div></div>
+    </div>`;
+  $("#recMore").onclick = () => showTab("herstel");
 }
 // --------------------------------------------------------------------- trainingsplan
 const KIND_COL = {rustig:"--green", herstel:"--teal", lang:"--blue", drempel:"--orange", interval:"--red", wedstrijdtempo:"--purple", wedstrijd:"--accent", rust:"--faint"};
@@ -1190,6 +1251,11 @@ function renderPlan(){
 
   $("#planThis").innerHTML = weekHtml(P.this_week, "Deze week", true);
   $("#planNext").innerHTML = weekHtml(P.next_week, "Volgende week", false);
+  const RV = P.reviews || [];
+  $("#planReviews").style.display = RV.length ? "" : "none";
+  $("#planReviews").innerHTML = `<h3>Terugblikken</h3><p class="cap">Elke zondagavond automatisch (ook als melding op je telefoon)</p>
+    <div style="display:grid;gap:8px">${RV.map((r,i)=>`<details class="review" ${i===0?"open":""}><summary><span>${esc(r.title)} · <span class="muted">${esc(r.range)}</span></span><span class="muted tnum">${fmt(r.km,1)} km</span></summary>
+      <ul>${r.lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ul></details>`).join("")}</div>`;
   // ---- trainingsdagen per week
   [P.this_week, P.next_week].forEach(w => {
     const box = $(`.wdPick[data-week="${w.start}"]`), btn = $(`.wdBtn[data-week="${w.start}"]`);

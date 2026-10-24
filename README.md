@@ -28,6 +28,7 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 | `metrics.py` | VDOT, beste stukken, splits, efficiëntie, week- en dagreeksen |
 | `projection.py` | Trend, projectie, doel, scenario |
 | `analysis.py` | Analyse per training, techniek-focus, trainingssuggestie (volgt het plan, bijgestuurd op herstel) + Garmin-workout |
+| `notify.py` | Meldingen via ntfy (ochtend, na een run, terugblik, storingen) |
 | `plan.py` | Trainingsplan: fase, weekomvang, indeling over je dagen, uitleg, volgende week, bijsturen bij gemiste trainingen |
 | `insights.py` | Inzichten in gewone taal |
 | `app.py` (`build_payload`) + `static/index.html` | Server en dashboard |
@@ -49,13 +50,23 @@ Rondjes worden zelf opgebouwd (cirkel met de wind, tussenpunten naar populaire p
 (max 4% dubbel), eindigen eventueel tot 200 m voor de start, en hebben voorkeur voor groen/rustige paden en je eigen
 looproutes (warmtekaart uit de GPS van je runs).
 
+## Meldingen op je telefoon (ntfy)
+Installeer de gratis app **ntfy** en draai `powershell -ExecutionPolicy Bypass -File .\set_ntfy.ps1`: dat maakt een geheim kanaal,
+zet het lokaal en in GitHub (secret `NTFY_TOPIC`) en stuurt een testbericht. Abonneer je in de app op het getoonde kanaal.
+- **Ochtendbericht** zodra Garmin je Training Readiness van vandaag heeft (uiterlijk 9:00): training, herstel, weer/wind, doel.
+- **Na elke run** een korte analyse (oordeel + belangrijkste tip).
+- **Zondag 20:00** een terugblik op de week (ook terug te lezen op het tabblad Trainingsplan).
+- **Storingen**: Garmin-koppeling faalt, GitHub-token verloopt (14/7/3/1 dagen vooraf), of een run in GitHub mislukt.
+
+`notify.py` regelt dit; `data/notify.json` voorkomt dubbele berichten. Test: `python notify.py test` of `python notify.py dry`.
+
 ## Garmin-login: pc en cloud apart
 De cloud ververst zijn Garmin-token bij elke run; daardoor wordt een gedeelde kopie ongeldig. Gebruik daarom op de
 pc een eigen login (`python garmin_login.py`) en deel het tokenbestand niet met de cloud (die heeft zijn eigen token
 in de versleutelde cache).
 
 ## Online via GitHub (alle apparaten)
-De workflow `.github/workflows/dashboard.yml` draait elk uur (en bij acties vanaf de site):
+De workflow `.github/workflows/dashboard.yml` draait overdag elke 10 minuten, 's nachts elk uur (en bij acties vanaf de site); de site wordt alleen opnieuw gepubliceerd als er iets veranderd is (of na een uur):
 cache terugzetten → actie → sync (intervals.icu + Garmin) → statische site bouwen → cache opslaan → GitHub Pages.
 
 - Data op de site is versleuteld (AES-256-GCM, sleutel uit je wachtwoord). De cache staat versleuteld in de branch `state`.
