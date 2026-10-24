@@ -342,6 +342,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   <!-- OVERZICHT -->
   <section class="view" data-view="overzicht">
     <div class="hero" id="hero"><div class="skeleton" style="min-height:180px;opacity:.3"></div></div>
+    <div class="grid tiles" id="tiles"></div>
     <div class="grid g2">
       <div class="card" id="sugCard"></div>
       <div class="card" id="recCard"></div>
@@ -351,9 +352,6 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="morelist">
       <details class="more" data-k="route"><summary><b>Looproute</b><span class="hint" id="hint-route"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="card" id="routeCard"></div>
-      </details>
-      <details class="more" data-k="tiles"><summary><b>Kerncijfers</b><span class="hint" id="hint-tiles"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
-        <div class="grid tiles" id="tiles"></div>
       </details>
       <details class="more" data-k="insights"><summary><b>Inzichten</b><span class="hint" id="hint-insights"></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
         <div class="card"><div class="row between"><div><h3>Inzichten</h3><p class="cap">Automatisch uit je data, per categorie</p></div><div class="chips" id="insChips"></div></div><div class="ins" id="insights"></div></div>
