@@ -20,8 +20,8 @@ PHASE_LABELS = {"basis": "Basis", "opbouw": "Opbouw", "specifiek": "Specifiek", 
                 "race": "Wedstrijdweek", "herstel": "Herstelweek"}
 KIND_LABELS = {"rust": "Rust", "rustig": "Rustige duurloop", "lang": "Lange duurloop", "drempel": "Drempeltraining",
                "interval": "Intervaltraining", "wedstrijdtempo": "Wedstrijdtempo", "herstel": "Herstelrun",
-               "wedstrijd": "Wedstrijd"}
-QUALITY = ("drempel", "interval", "wedstrijdtempo")
+               "wedstrijd": "Wedstrijd", "anaeroob": "Snelheid (anaeroob)"}
+QUALITY = ("drempel", "interval", "wedstrijdtempo", "anaeroob")
 
 
 # --------------------------------------------------------------------------- hulpfuncties
@@ -120,6 +120,13 @@ def _session(kind, km_target, ctx, label_extra=None, variant=0):
             {"kind": "interval", "secs": secs, "pace": [paces["I"] - 5, paces["I"] + 5], "label": "Interval"},
             {"kind": "recovery", "secs": max(90, int(secs * 0.8)), "label": "Dribbelen"}]}, cd]
         return f"Intervaltraining {reps}× {secs // 60 if secs % 60 == 0 else round(secs / 60, 1)} min".replace(".", ","), steps
+    if kind == "anaeroob":  # korte, bijna maximale stukken met ruim herstel: anaerobe capaciteit en snelheid
+        reps, secs = [(8, 30), (10, 30), (6, 45)][variant % 3]
+        fast = paces.get("R") or paces["I"] - 15
+        steps = [wu, {"kind": "repeat", "n": reps, "steps": [
+            {"kind": "interval", "secs": secs, "pace": [fast - 35, fast - 10], "label": "Snel (±90–95% van je max), ontspannen blijven"},
+            {"kind": "recovery", "secs": 120, "label": "Wandelen/dribbelen"}]}, cd]
+        return f"Snelheid {reps}× {secs} s", steps
     if kind == "wedstrijdtempo":
         rp = ctx["race_pace"]
         if goal_km <= 10.5:
@@ -163,6 +170,7 @@ PURPOSE = {
     "wedstrijdtempo": "Op wedstrijdtempo lopen leert je lichaam en hoofd precies dat tempo; je pacing wordt beter en het voelt op de dag vertrouwd.",
     "herstel": "Een korte, rustige run bevordert de doorbloeding en het herstel zonder nieuwe vermoeidheid.",
     "wedstrijd": "Wedstrijddag: alles komt samen.",
+    "anaeroob": "Korte, bijna maximale stukken met ruim herstel trainen je anaerobe capaciteit, snelheid en loopeconomie; zo kun je versnellen en een eindsprint plaatsen.",
     "rust": "Rust is waar je lichaam sterker wordt van de training die je deed.",
 }
 FOCUS = {
@@ -249,6 +257,9 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
     # ---- dagen kiezen voor de rest van de week
     open_days = [d for d in run_days if d not in closed]
     n_q = 0 if phase == "herstel" else 1 if (n <= 3 or recovery or phase in ("taper", "race", "basis")) else 2
+    bal = ctx.get("balance_focus") or {}
+    if bal.get("low") == "short" and n_q == 2 and phase in ("basis", "opbouw"):
+        n_q = 1  # te weinig rustige basis: één kwaliteitstraining minder, meer rustige kilometers
     n_q_left = max(0, n_q - len(done_hard))
     if long_done:
         cand_long = [None]
@@ -286,6 +297,16 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
         q_kinds = ["wedstrijdtempo" if goal_km <= 10.5 else "drempel"]
     else:
         q_kinds = ["interval", "drempel"] if goal_km <= 10.5 else ["drempel", "interval" if goal_km <= 25 else "wedstrijdtempo"]
+    # Garmins trainingsbalans (4 weken): tekorten aanvullen, overschot afbouwen (niet in de specifieke fase/taper)
+    focus = ctx.get("balance_focus") or {}
+    bal_note = None
+    if phase in ("basis", "opbouw", "herstel") or recovery:
+        if focus.get("ana") == "short" and n_q >= 1:
+            q_kinds = ["anaeroob"] + [k for k in q_kinds if k != "interval"][:1] if focus.get("high") == "over" else ["anaeroob"] + q_kinds[1:]
+            bal_note = "anaeroob"
+        elif focus.get("high") == "short" and "drempel" not in q_kinds:
+            q_kinds = ["drempel"] + q_kinds[1:]
+            bal_note = "high_short"
     todo = list(q_kinds)
     for k in done_q_kinds:
         if k in todo:
@@ -377,7 +398,7 @@ def plan_week(week_start, base_km, longest_km, goal, settings, ctx, prev_target=
             "cycle_week": pinfo["cycle_week"], "weeks_to": pinfo["weeks_to"], "target_km": round(target, 1),
             "planned_km": round(planned_km, 1), "base_km": round(base_km, 1), "days": days,
             "sessions": sum(1 for x in days if x["kind"] != "rust"), "quality": len([x for x in days if x["kind"] in QUALITY]),
-            "easy_pct": 100 - hard_share, "q_dropped": q_dropped, "run_days": run_days, "custom_days": custom_days,
+            "easy_pct": 100 - hard_share, "q_dropped": q_dropped, "balance": ctx.get("balance_text") if (phase in ("basis", "opbouw", "herstel") or recovery) else None, "run_days": run_days, "custom_days": custom_days,
             "done": {"km": round(done_km, 1), "quality": len(done_hard), "long": long_done, "q_left": len(q_days),
                      "long_left": long_day is not None and days_plan.get(long_day) == "lang"} if done else None}
     week["why"] = _week_why(week, phase, pinfo, recovery, goal, base_km, prev_target, is_next)
@@ -427,6 +448,8 @@ def _week_why(w, phase, pinfo, recovery, goal, base_km, prev_target, is_next):
         out.append(f"Al gedaan deze week: {_fmt_km(dn['km'])} km, {dn['quality']} zware training{'en' if dn['quality'] != 1 else ''}"
                    + (", lange duurloop ✓" if dn["long"] else "") + ". De rest van de week is daarop afgestemd"
                    + (f": {' en '.join(left)}, met een rustige dag naast elke zware training." if left else ": alleen nog rustige kilometers."))
+    if w.get("balance"):
+        out.append(w["balance"])
     if w.get("custom_days"):
         out.append("Je hebt voor deze week andere trainingsdagen gekozen dan normaal.")
     if w.get("q_dropped"):
@@ -455,7 +478,7 @@ def free_slot(week, d, counts=lambda x: True, statuses=("planned",)):
 
 
 # --------------------------------------------------------------------------- hoofdingang
-def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
+def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings, balance=None):
     if not (paces and zones and runs):
         return None
     goal = goal or {"type": "general", "distance_km": 10}
@@ -476,6 +499,7 @@ def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
     max_recent = max([w["km"] for w in done] or [base_km])
     longest = max([r["km"] for r in runs if (today - dt.date.fromisoformat(r["date"])).days <= 28] or [8])
     ctx = {"z": z, "paces": paces, "goal_km": goal_km, "race_pace": rp, "max_recent_km": max_recent, "phase": None}
+    ctx.update(_balance_ctx(balance))
 
     def week(ws, prev_target=None, is_next=False, done=None, prev_hard=None):
         ctx["phase"] = phase_for(goal, settings, ws)[0]
@@ -521,6 +545,28 @@ def build(runs, run_weeks, daily_by, zones, paces, vdot, today, goal, settings):
                      "phase": phase_for(goal, settings, this_ws + dt.timedelta(weeks=i))[0]} for i in range(min(weeks + 1, 30))]
     return {"goal": goal, "this_week": w1, "next_week": w2, "timeline": timeline,
             "run_days": settings["run_days"], "run_days_auto": auto_days, "long_days": settings.get("long_days") or [4, 5, 6]}
+
+
+def _balance_ctx(balance):
+    """Garmins trainingsbalans vertalen naar bijsturing + uitleg voor het weekplan."""
+    if not balance or not balance.get("cats"):
+        return {}
+    c = balance["cats"]
+    focus = {k: v["status"] for k, v in c.items() if v.get("status")}
+    fmt = lambda k: f"{c[k]['value']}, doel {c[k]['min']}–{c[k]['max']}"
+    parts = []
+    if focus.get("ana") == "short":
+        parts.append(f"tekort aan anaeroob ({fmt('ana')}): er staat een snelheidstraining met korte, bijna maximale stukken in")
+    if focus.get("high") == "over":
+        parts.append(f"te veel hoog aeroob ({fmt('high')}): minder drempel/VO2max, en houd je rustige runs écht in Z2 (onder "
+                     "je Z3-grens), want 'rustig maar net te snel' telt ook als hoog aeroob")
+    elif focus.get("high") == "short":
+        parts.append(f"tekort aan hoog aeroob ({fmt('high')}): de kwaliteitstraining is een drempeltraining")
+    if focus.get("low") == "short":
+        parts.append(f"tekort aan laag aeroob ({fmt('low')}): één kwaliteitstraining minder en meer rustige kilometers")
+    text = ("Garmin-trainingsbalans (4 weken): " + "; ".join(parts) + ".") if parts else \
+        "Garmin-trainingsbalans (4 weken) is in orde; het plan houdt de verdeling zo."
+    return {"balance_focus": focus, "balance_text": text}
 
 
 def habitual_days(runs, today, long_days):

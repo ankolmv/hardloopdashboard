@@ -117,6 +117,8 @@ def fetch_day(g, day):
         out["load_aerobic_high"] = b.get("monthlyLoadAerobicHigh")
         out["load_anaerobic"] = b.get("monthlyLoadAnaerobic")
         out["load_focus"] = b.get("trainingBalanceFeedbackPhrase")
+        out["load_targets"] = {k: [b.get(f"monthlyLoad{g}TargetMin"), b.get(f"monthlyLoad{g}TargetMax")]
+                               for k, g in (("low", "AerobicLow"), ("high", "AerobicHigh"), ("ana", "Anaerobic"))}
         vo2 = _g(ts, "mostRecentVO2Max", "generic")
         if isinstance(vo2, dict):
             out["vo2max"] = vo2.get("vo2MaxPreciseValue") or vo2.get("vo2MaxValue")

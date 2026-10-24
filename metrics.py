@@ -410,7 +410,7 @@ def daily_recovery(wellness, garmin_daily):
         for k in ("readiness", "readiness_level", "readiness_time", "readiness_list", "readiness_morning", "bb_now", "bb_now_time", "bb_high", "bb_low", "bb_charged", "bb_wake", "stress_avg",
                   "hrv_night", "hrv_week", "hrv_status", "hrv_base_lo", "hrv_base_hi", "training_status",
                   "acwr", "load_acute", "load_chronic", "recovery_time_h", "respiration", "intensity_min",
-                  "load_focus", "load_aerobic_low", "load_aerobic_high", "load_anaerobic"):
+                  "load_focus", "load_aerobic_low", "load_aerobic_high", "load_anaerobic", "load_targets"):
             if g.get(k) is not None:
                 row[k] = g[k]
         if g.get("sleep_s"):

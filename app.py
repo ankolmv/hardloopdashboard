@@ -225,6 +225,47 @@ def set_garmin_zones(body):
     return {"ok": True, "zones": {z.get("sport"): [z.get(f"zone{i}Floor") for i in range(1, 6)] for z in after}}
 
 
+# Garmin deelt de belasting van een training in naar het 'Training Effect'-label (benadering van Garmins eigen verdeling)
+BALANCE_CAT = {"RECOVERY": "low", "BASE": "low", "AEROBIC_BASE": "low", "TEMPO": "high", "LACTATE_THRESHOLD": "high",
+               "THRESHOLD": "high", "VO2MAX": "high", "ANAEROBIC_CAPACITY": "ana", "ANAEROBIC": "ana", "SPEED": "ana", "SPRINT": "ana"}
+BALANCE_NAMES = {"low": "Laag aeroob", "high": "Hoog aeroob", "ana": "Anaeroob"}
+FOCUS_NL = {"AEROBIC_LOW_SHORTAGE": "Tekort laag aeroob", "AEROBIC_HIGH_SHORTAGE": "Tekort hoog aeroob",
+            "ANAEROBIC_SHORTAGE": "Tekort anaeroob", "BALANCED": "In balans", "AEROBIC_LOW_FOCUS": "Focus laag aeroob",
+            "AEROBIC_HIGH_FOCUS": "Focus hoog aeroob", "ANAEROBIC_FOCUS": "Focus anaeroob", "NO_BALANCE": "Nog geen balans"}
+
+
+def load_balance(data, daily, today):
+    """Garmins 4-weekse trainingsbalans (laag aeroob / hoog aeroob / anaeroob) met doelbereik, plus de verdeling per week."""
+    g = next((d for d in reversed(daily) if d.get("load_aerobic_low") is not None), None)
+    if not g:
+        return None
+    cats = {}
+    for k, key in (("low", "load_aerobic_low"), ("high", "load_aerobic_high"), ("ana", "load_anaerobic")):
+        v = g.get(key)
+        lo, hi = ((g.get("load_targets") or {}).get(k) or [None, None])
+        status = None if v is None or lo is None else "short" if v < lo else "over" if v > hi else "ok"
+        cats[k] = {"name": BALANCE_NAMES[k], "value": round(v) if v is not None else None, "min": lo, "max": hi, "status": status}
+    ws0 = M.week_start(today) - dt.timedelta(weeks=3)
+    weeks = []
+    for i in range(4):
+        ws = ws0 + dt.timedelta(weeks=i)
+        lab, rng = M.week_label(ws)
+        weeks.append({"week": ws.isoformat(), "label": lab, "range": rng, "low": 0, "high": 0, "ana": 0, "acts": []})
+    for a in data.get("garmin_activities") or []:
+        day = dt.date.fromisoformat(a["start"][:10])
+        i = (day - ws0).days // 7
+        if not 0 <= i < 4 or not a.get("garmin_load"):
+            continue
+        cat = next((c for lab, c in BALANCE_CAT.items() if lab in (a.get("te_label") or "")), "low")
+        weeks[i][cat] += a["garmin_load"]
+        weeks[i]["acts"].append({"date": day.isoformat(), "label": a.get("te_label"), "cat": cat, "load": round(a["garmin_load"])})
+    for w in weeks:
+        for k in ("low", "high", "ana"):
+            w[k] = round(w[k])
+    return {"date": g["date"], "focus": g.get("load_focus"), "focus_nl": FOCUS_NL.get(g.get("load_focus") or "", g.get("load_focus")),
+            "cats": cats, "weeks": weeks}
+
+
 def load_goal():
     if os.path.exists(GOAL_PATH):
         with open(GOAL_PATH, encoding="utf-8") as f:
@@ -454,6 +495,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         "status": {k: latest_g.get(k) for k in ("training_status", "load_focus", "acwr", "load_aerobic_low",
                                                  "load_aerobic_high", "load_anaerobic")},
         "scenario": sc,
+        "load_balance": load_balance(data, daily, today),
     }
 
     # ---------------- Herstel
@@ -582,7 +624,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     # ---------------- Analyse, suggestie, techniek-focus
     tp_now = M.training_paces(tr["now"]) if tr else None
     paces = {"E_fast": tp_now["E"]["from"], "E_slow": tp_now["E"]["to"], "M": tp_now["M"]["from"],
-             "T": tp_now["T"]["from"], "I": tp_now["I"]["from"]} if tp_now else None
+             "T": tp_now["T"]["from"], "I": tp_now["I"]["from"], "R": tp_now["R"]["from"]} if tp_now else None
     daily_by = {x["date"]: x for x in daily}
     # Analyse, suggestie en Garmin-workouts gebruiken altijd de model-zones (los van de weergavekeuze)
     model_rows = hr_rows_by.get("model") or hr_rows
@@ -606,7 +648,8 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
 
     plan = None
     if paces and model_rows and runs and tr:
-        plan = PL.build(runs_m, all_weeks, daily_by, model_rows, paces, tr["now"], today, goal, settings)
+        plan = PL.build(runs_m, all_weeks, daily_by, model_rows, paces, tr["now"], today, goal, settings,
+                        training.get("load_balance"))
         if plan:
             plan["reviews"] = list(reversed(notify.load_reviews()[-12:]))  # wekelijkse terugblikken
             pushed_all = load_pushed()
