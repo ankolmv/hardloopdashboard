@@ -123,9 +123,11 @@ def _session(kind, km_target, ctx, label_extra=None, variant=0):
     if kind == "anaeroob":  # korte, bijna maximale stukken met ruim herstel: anaerobe capaciteit en snelheid
         reps, secs = [(8, 30), (10, 30), (6, 45)][variant % 3]
         fast = paces.get("R") or paces["I"] - 15
+        # Ruim, wandelend herstel: elk stuk moet echt snel zijn. Blijft de hartslag tussendoor hoog, dan telt de
+        # training bij Garmin als 'tempo' (hoog aeroob) in plaats van anaeroob.
         steps = [wu, {"kind": "repeat", "n": reps, "steps": [
-            {"kind": "interval", "secs": secs, "pace": [fast - 35, fast - 10], "label": "Snel (±90–95% van je max), ontspannen blijven"},
-            {"kind": "recovery", "secs": 120, "label": "Wandelen/dribbelen"}]}, cd]
+            {"kind": "interval", "secs": secs, "pace": [fast - 45, fast - 20], "label": "Snel (±95% van je max), ontspannen blijven"},
+            {"kind": "recovery", "secs": 150 if secs <= 30 else 180, "label": "Wandelen tot je hartslag flink gezakt is"}]}, cd]
         return f"Snelheid {reps}× {secs} s", steps
     if kind == "wedstrijdtempo":
         rp = ctx["race_pace"]

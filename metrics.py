@@ -270,6 +270,14 @@ def analyze_run(a, ctx):
             gap_ratio = (a["gap"] / a["pace"]) if a.get("gap") and a.get("pace") else 1.0
             v_mmin = v_mean * gap_ratio * 60
             hrr = (h_mean - rest) / (max_hr - rest) if max_hr > rest else None
+            # Gelijkmatig tempo? (variatie van het tempo per minuut). Bij blokken + herstel loopt de hartslag achter
+            # en klopt de verhouding tempo/hartslag niet: dan telt de hartslagschatting niet mee voor je week-VDOT.
+            per_min = {}
+            for i in idx:
+                per_min.setdefault(time[i] // 60, []).append(vel[i])
+            mins_v = [statistics.mean(x) for x in per_min.values() if len(x) > 20]
+            r["pace_cv"] = round(statistics.pstdev(mins_v) / statistics.mean(mins_v), 3) if len(mins_v) > 5 else None
+            r["steady"] = r["pace_cv"] is not None and r["pace_cv"] < 0.06
             if hrr and 0.5 <= hrr <= 0.92:
                 r["vdot_hr"] = round((vo2_at_speed(v_mmin) - 3.5) / hrr + 3.5, 2)
             r["ef"] = round(v_mmin / h_mean, 4)
@@ -357,7 +365,7 @@ def weekly_runs(runs, offset, groups="intervals"):
         w["longest"] = max(w["longest"], r["km"])
         if r["vdot_race"]:
             w["race"].append(r["vdot_race"])
-        if r["vdot_hr"]:
+        if r["vdot_hr"] and r.get("steady", True):  # alleen runs met een gelijkmatig tempo
             w["hr"].append(r["vdot_hr"] + offset)
         for k, key in WEEK_LISTS.items():
             if r.get(key) is not None:
