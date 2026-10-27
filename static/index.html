@@ -1222,7 +1222,7 @@ function renderBalance(el, withPlanNote){
           <div class="sub">${BAL_WHAT[c.k]}</div></div>`).join("")}
         <p class="cap" style="margin:0">${short.length||over.length ? `Je hebt ${short.length?`<b>te weinig ${short.join(" en ")}</b>`:""}${short.length&&over.length?" en ":""}${over.length?`<b>te veel ${over.join(" en ")}</b>`:""}.`+
           (withPlanNote ? " Je trainingsplan stuurt hierop bij (zie 'Waarom deze week')." : " Het trainingsplan stuurt hierop bij.") : "Mooi in balans."}</p></div>
-      <div><div class="muted" style="font-size:12px;font-weight:600">Per week (belasting per training, ingedeeld op Garmins Training Effect-label)</div>
+      <div><div class="muted" style="font-size:12px;font-weight:600">Per kalenderweek: Garmins eigen verdeling per training (teruggerekend uit de dagtotalen; het totaal links telt precies 28 dagen)</div>
         <div class="chart sm"><canvas id="${cid}"></canvas></div></div>
     </div>`;
   const W = B.weeks;

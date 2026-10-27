@@ -234,6 +234,48 @@ FOCUS_NL = {"AEROBIC_LOW_SHORTAGE": "Tekort laag aeroob", "AEROBIC_HIGH_SHORTAGE
             "AEROBIC_HIGH_FOCUS": "Focus hoog aeroob", "ANAEROBIC_FOCUS": "Focus anaeroob", "NO_BALANCE": "Nog geen balans"}
 
 
+def garmin_load_split(data):
+    """Garmins eigen verdeling per training (laag/hoog aeroob, anaeroob), teruggerekend uit de dagelijkse 4-weekse totalen.
+
+    Een training telt 28 dagen mee. Wat er op dag d bij kwam = verandering van het totaal + wat er die dag uitviel
+    (de verdeling van dag d-28). Lukt dat niet (geen dagwaarden), dan telt de hele belasting bij de soort van het label.
+    Geeft {activiteit-start: {"low", "high", "ana"}}."""
+    gd = data.get("garmin_daily") or {}
+    keys = ("load_aerobic_low", "load_aerobic_high", "load_anaerobic")
+    tot = {k: [gd[k][x] or 0 for x in keys] for k in gd if all(gd[k].get(x) is not None for x in keys)}
+    acts = {}
+    for a in data.get("garmin_activities") or []:
+        if a.get("garmin_load"):
+            acts.setdefault(a["start"][:10], []).append(a)
+    added, out = {}, {}  # added[dag] = [laag, hoog, ana] die op die dag bij kwam
+
+    def by_label(a):
+        cat = next((c for lab, c in BALANCE_CAT.items() if lab in (a.get("te_label") or "")), "low")
+        return {"low": 0, "high": 0, "ana": 0, cat: a["garmin_load"]}
+
+    for day in sorted(set(tot) | set(acts)):
+        d = dt.date.fromisoformat(day)
+        prev, old = (d - dt.timedelta(days=1)).isoformat(), (d - dt.timedelta(days=28)).isoformat()
+        todays = acts.get(day, [])
+        if day in tot and prev in tot:
+            drop = added.get(old) or [sum(by_label(a)[c] for a in acts.get(old, [])) for c in ("low", "high", "ana")]
+            add = [tot[day][i] - tot[prev][i] + drop[i] for i in range(3)]
+        else:
+            add = None
+        load = sum(a["garmin_load"] for a in todays)
+        if add is None or not load or sum(max(0, x) for x in add) < 0.5 * load:
+            split = [by_label(a) for a in todays]  # geen bruikbare dagwaarden: op label
+        else:
+            ana = min(max(0.0, add[2]), load)
+            aer = "low" if add[0] >= add[1] else "high"
+            split = [{"low": 0, "high": 0, "ana": ana * a["garmin_load"] / load, aer: (load - ana) * a["garmin_load"] / load}
+                     for a in todays]
+        added[day] = [sum(x[c] for x in split) for c in ("low", "high", "ana")] if todays else [0, 0, 0]
+        for a, x in zip(todays, split):
+            out[a["start"]] = x
+    return out
+
+
 def load_balance(data, daily, today):
     """Garmins 4-weekse trainingsbalans (laag aeroob / hoog aeroob / anaeroob) met doelbereik, plus de verdeling per week."""
     g = next((d for d in reversed(daily) if d.get("load_aerobic_low") is not None), None)
@@ -251,14 +293,17 @@ def load_balance(data, daily, today):
         ws = ws0 + dt.timedelta(weeks=i)
         lab, rng = M.week_label(ws)
         weeks.append({"week": ws.isoformat(), "label": lab, "range": rng, "low": 0, "high": 0, "ana": 0, "acts": []})
+    split = garmin_load_split(data)
     for a in data.get("garmin_activities") or []:
         day = dt.date.fromisoformat(a["start"][:10])
         i = (day - ws0).days // 7
         if not 0 <= i < 4 or not a.get("garmin_load"):
             continue
-        cat = next((c for lab, c in BALANCE_CAT.items() if lab in (a.get("te_label") or "")), "low")
-        weeks[i][cat] += a["garmin_load"]
-        weeks[i]["acts"].append({"date": day.isoformat(), "label": a.get("te_label"), "cat": cat, "load": round(a["garmin_load"])})
+        sp = split.get(a["start"]) or {}
+        for k in ("low", "high", "ana"):
+            weeks[i][k] += sp.get(k, 0)
+        weeks[i]["acts"].append({"date": day.isoformat(), "label": a.get("te_label"), "load": round(a["garmin_load"]),
+                                 **{k: round(sp.get(k, 0)) for k in ("low", "high", "ana")}})
     for w in weeks:
         for k in ("low", "high", "ana"):
             w[k] = round(w[k])
