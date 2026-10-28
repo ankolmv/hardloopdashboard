@@ -4,6 +4,7 @@ Alles is regelgebaseerd en werkt met de hartslagzones van het model (5 zones) en
 Daniels-trainingstempo's uit je huidige VDOT.
 """
 import datetime as dt
+import re
 import statistics
 
 import metrics as M
@@ -95,10 +96,53 @@ def analyze_session(r, runs, daily_by, zones, paces):
     tip = lambda tone, text: (good if tone == "good" else tips).append({"tone": tone, "text": text})
 
     # --- uitvoering t.o.v. het doel van dit type training
-    if kind in ("rustig", "lang", "herstel") and easy_pct is not None:
-        if easy_pct >= 70:
-            tip("good", f"Netjes rustig: {easy_pct}% in Z1–Z2. Precies waar een {TYPE_LABELS[kind].lower()} voor is.")
-        else:
+    efficiency = None
+    if kind in ("rustig", "lang", "herstel") and easy_pct is not None and z2:
+        st = store.streams(r["id"])
+        hr, tm = st.get("heartrate") or [], st.get("time") or []
+        top = z2["to"]
+        samples = [(tm[i], hr[i]) for i in range(1, min(len(hr), len(tm))) if hr[i] and tm[i] >= 120]
+        finish = None
+        if samples and samples[-1][0] - samples[0][0] > 15 * 60:
+            # Snel einde? Laatste 8 min duidelijk boven Z2 terwijl de rest rustig was
+            end_t = samples[-1][0] - 8 * 60
+            body = [h for t, h in samples if t < end_t]
+            tail = [h for t, h in samples if t >= end_t]
+            if body and tail and statistics.mean(tail) > top + 5 and statistics.mean(body) <= top + 2:
+                finish = {"mins": 8, "hr": round(statistics.mean(tail)), "max": max(tail)}
+                samples = [(t, h) for t, h in samples if t < end_t]
+        tol = round(sum(1 for _, h in samples if h <= top + 3) / len(samples) * 100) if samples else easy_pct
+        border = round(sum(1 for _, h in samples if top < h <= top + 3) / len(samples) * 100) if samples else 0
+        part = " (los van de versnellingen aan het eind)" if finish else ""
+        if tol >= 80:
+            tip("good", f"Netjes rustig{part}: {tol}% in Z2 of maximaal 3 slagen erboven"
+                        + (f" ({border}% net boven {top} bpm: grensgebied, voor je lichaam vrijwel hetzelfde)" if border >= 10 else "")
+                        + f". Precies waar een {TYPE_LABELS[kind].lower()} voor is.")
+        elif tol >= 65:
+            tip("neutral", f"Grotendeels rustig{part}: {tol}% in Z2 of net erboven. Probeer het iets vaker onder {top} bpm te houden; "
+                           f"een paar seconden per km langzamer is genoeg.")
+        # Versnellingen (bijv. 6× 20 s) aan het eind horen bij de training: geen fout
+        strides = next((m for m in (re.match(r"(\d+)x (\d+)s", x or "") for x in (r.get("intervals") or []))
+                        if m and int(m.group(1)) >= 3 and int(m.group(2)) <= 40), None)
+        if finish and strides:
+            tip("good", f"Afgesloten met versnellingen ({strides.group(1)}× {strides.group(2)} s), zoals gepland. Die korte pieken "
+                        f"(tot {finish['max']} bpm) horen erbij en verbeteren je loopeconomie; ze tellen niet als 'te hard'.")
+        elif finish:
+            tip("neutral", f"In de laatste {finish['mins']} min versnelde je (gem. {finish['hr']} bpm, max {finish['max']}). Prima als bewuste "
+                           f"afsluiting, maar dat deel telt als Z3–Z4. Wil je de run helemaal rustig houden, blijf dan tot het eind onder {top} bpm.")
+        # Efficiëntie: tempo per hartslag t.o.v. je eigen rustige runs van de laatste 6 weken (stijgt als je fitter wordt)
+        ref = [x["ef"] for x in runs if x.get("ef") and x["date"] < r["date"] and classify(x) in ("rustig", "lang", "herstel")
+               and (d - dt.date.fromisoformat(x["date"])).days <= 42]
+        if r.get("ef") and len(ref) >= 3:
+            pct = round((r["ef"] / statistics.median(ref) - 1) * 100, 1)
+            efficiency = {"pct": pct, "n": len(ref)}
+            if pct >= 1:
+                tip("good", f"Efficiënt: {pct:+.1f}% meer tempo per hartslag dan je rustige runs van de laatste 6 weken. Je aerobe basis groeit.")
+            elif pct <= -3:
+                why = (" Logisch: gisteren deed je een zware training." if ctx["prev_day"] and ctx["prev_day"]["hard"]
+                       else " Vaak vermoeidheid, warmte of weinig slaap; één run zegt weinig.")
+                tip("neutral", f"Iets minder efficiënt dan normaal ({pct:+.1f}% tempo per hartslag).{why}")
+        if tol < 65:
             tip("warn", f"Te zwaar voor een {TYPE_LABELS[kind].lower()}: maar {easy_pct}% in Z1–Z2 en {z3 or 0}% in Z3"
                         f"{f', {z4 + z5}% in Z4–Z5' if (z4 or 0) + (z5 or 0) >= 5 else ''}. "
                         f"Beter: hartslag {z2['from']}–{z2['to']} bpm"
@@ -121,7 +165,7 @@ def analyze_session(r, runs, daily_by, zones, paces):
 
     if pacing and kind in ("rustig", "lang", "drempel"):
         if pacing["diff_pct"] >= 3:
-            tip("warn", f"Te snel gestart: de tweede helft was {pacing['diff_pct']}% langzamer "
+            tip("warn" if pacing["diff_pct"] >= 5 else "neutral", f"Te snel gestart: de tweede helft was {pacing['diff_pct']}% langzamer "
                         f"({mmss(pacing['first'])} → {mmss(pacing['second'])}/km). Begin 10–15 s/km rustiger.")
         elif pacing["diff_pct"] <= -2 and kind != "drempel":
             if (pacing["hr_second"] or 0) > (z2["to"] if z2 else 999):
@@ -134,7 +178,7 @@ def analyze_session(r, runs, daily_by, zones, paces):
         if r["decoupling"] <= 5:
             tip("good", f"Ontkoppeling {r['decoupling']}%: je hartslag bleef stabiel t.o.v. je tempo. Sterk uithoudingsvermogen.")
         else:
-            tip("warn", f"Ontkoppeling {r['decoupling']}%: je hartslag liep flink op t.o.v. je tempo. Begin rustiger, "
+            tip("warn" if r["decoupling"] > 8 else "neutral", f"Ontkoppeling {r['decoupling']}%: je hartslag liep flink op t.o.v. je tempo. Begin rustiger, "
                         f"en drink bij runs > 75 min onderweg.")
 
     # --- omstandigheden
@@ -157,9 +201,11 @@ def analyze_session(r, runs, daily_by, zones, paces):
 
     verdict = ("Goed uitgevoerd" if not any(t["tone"] == "warn" for t in tips)
                else "Kan beter" if len([t for t in tips if t["tone"] == "warn"]) == 1 else "Aandachtspunten")
+    if verdict == "Goed uitgevoerd" and any("versnelde je" in t["text"] for t in tips):
+        verdict = "Goed, let op het einde"
     return {"type": kind, "type_label": TYPE_LABELS[kind], "verdict": verdict,
-            "verdict_cls": "green" if verdict == "Goed uitgevoerd" else "orange" if verdict == "Kan beter" else "red",
-            "zones_pct": zp, "pacing": pacing, "context": ctx, "good": good, "tips": tips,
+            "verdict_cls": "green" if verdict.startswith("Goed") else "orange" if verdict == "Kan beter" else "red",
+            "zones_pct": zp, "pacing": pacing, "context": ctx, "good": good, "tips": tips, "efficiency": efficiency,
             "splits": [{**s, "pace": mmss(s["time"])} for s in splits]}
 
 

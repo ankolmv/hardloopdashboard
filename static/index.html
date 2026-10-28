@@ -1677,7 +1677,7 @@ function renderZones(){
 function actRow(r){
   const d = new Date(r.date+"T12:00:00");
   return `<div class="act" data-id="${r.id}"><div class="d"><b>${d.getDate()}</b><span>${MONTHS[d.getMonth()]} · wk ${isoWeek(r.date)}</span></div>
-    <div class="n">${esc(r.name)} ${r.race?'<span class="badge orange">wedstrijd</span>':""}${r.te_label?` <span class="badge blue">${esc(prettify(r.te_label))}</span>`:""}<small>${(r.intervals||[]).join(" · ")||(r.vdot_race?`VDOT ${fmt(r.vdot_race,1)} ◆`:r.vdot_hr_cal?`VDOT ~${fmt(r.vdot_hr_cal,1)}`:"")}</small></div>
+    <div class="n">${esc(r.name)} ${r.race?'<span class="badge orange">wedstrijd</span>':""}${r.te_label?` <span class="badge blue">${esc(prettify(r.te_label))}</span>`:""}<small>${(r.intervals||[]).join(" · ")||(r.vdot_race?`VDOT ${fmt(r.vdot_race,1)} ◆`:r.analysis?.efficiency?`efficiëntie ${r.analysis.efficiency.pct>=0?"+":""}${fmt(r.analysis.efficiency.pct,1)}%`:"")}</small></div>
     <div class="m"><b class="tnum">${fmt(r.km,2)}</b><span>km</span></div><div class="m"><b class="tnum">${mmss(r.pace_s_km)}</b><span>/km</span></div>
     <div class="m x"><b class="tnum">${r.avg_hr??"–"}</b><span>bpm</span></div><div class="m x"><b class="tnum">${r.load??"–"}</b><span>belasting</span></div></div>`;
 }
@@ -1700,11 +1700,11 @@ async function openRun(id){
       ${kv("Hartslag", r.avg_hr?`${r.avg_hr} / ${r.max_hr??"–"}`:null)}${kv("Vermogen", r.power?`${r.power} W (NP ${r.np??"–"})`:null)}${kv("Cadans", r.cadence?fmt(r.cadence,0)+" spm":null)}
       ${kv("Belasting", r.load)}${kv("TRIMP", r.trimp)}${kv("RPE / gevoel", r.rpe?`${r.rpe} / ${r.feel??"–"}`:null)}
       ${kv("Training Effect", r.te_aerobic!=null?`${fmt(r.te_aerobic,1)} / ${fmt(r.te_anaerobic,1)}`:null)}${kv("HR-herstel 60 s", r.hrr60?r.hrr60+" slagen":null)}
-      ${kv("VDOT", r.vdot_race?fmt(r.vdot_race,1)+" ◆":r.vdot_hr_cal?"~"+fmt(r.vdot_hr_cal,1):null)}${kv("Ontkoppeling", r.decoupling!=null?r.decoupling+"%":null)}${kv("Calorieën", r.calories)}${kv("Stamina einde", r.stamina_end!=null?r.stamina_end+"%":null)}
+      ${kv("VDOT", r.vdot_race?fmt(r.vdot_race,1)+" ◆":null)}${kv("Efficiëntie", r.analysis?.efficiency?`${r.analysis.efficiency.pct>=0?"+":""}${fmt(r.analysis.efficiency.pct,1)}% <span class="muted" style="font-size:12px">t.o.v. je rustige runs</span>`:null)}${kv("Ontkoppeling", r.decoupling!=null?r.decoupling+"%":null)}${kv("Calorieën", r.calories)}${kv("Stamina einde", r.stamina_end!=null?r.stamina_end+"%":null)}
     </div>${r.intervals?.length?`<p class="cap" style="margin:12px 0 0">Intervallen: ${r.intervals.map(esc).join(" · ")}</p>`:""}</div>
     <div class="card"><div class="row between"><h3>Verloop</h3><div class="seg" id="dSeg"><button data-k="pace" class="on">Tempo</button><button data-k="hr">Hartslag</button><button data-k="cadence">Cadans</button><button data-k="watts">Vermogen</button></div></div><div class="chart" style="height:240px"><canvas id="cRun"></canvas></div></div>
     <div class="grid g2"><div class="card"><h3>Splits per km</h3><div class="tablewrap"><table>${splitsTable(det.splits)}</table></div></div>
-    <div class="card"><h3>Beste stukken</h3><div class="tablewrap"><table><thead><tr><th>Afstand</th><th>Tijd</th><th>VDOT</th></tr></thead><tbody>${r.efforts.map(e=>`<tr><td>${e.label}</td><td><b>${e.time}</b></td><td>${fmt(e.vdot,1)} ${e.hard?"◆":'<span class="badge">submax</span>'}</td></tr>`).join("")||'<tr><td colspan="3" class="muted">–</td></tr>'}</tbody></table></div></div></div>`;
+    ${!r.efforts.some(e=>e.hard) ? "" : `<div class="card"><h3>Beste stukken</h3><div class="tablewrap"><table><thead><tr><th>Afstand</th><th>Tijd</th><th>VDOT</th></tr></thead><tbody>${r.efforts.map(e=>`<tr><td>${e.label}</td><td><b>${e.time}</b></td><td>${fmt(e.vdot,1)} ${e.hard?"◆":'<span class="badge">submax</span>'}</td></tr>`).join("")||'<tr><td colspan="3" class="muted">–</td></tr>'}</tbody></table></div></div>`}</div>`;
   const draw = k => {
     const col = {pace:"--accent", hr:"--red", cadence:"--teal", watts:"--purple"}[k];
     mk("cRun", {data:{labels:det.distance, datasets:[
