@@ -65,7 +65,9 @@ def trend(points, today, value_key="vdot", lookback_weeks=26, max_slope=MAX_SLOP
     else:
         slope, icpt, sd, se = 0.0, statistics.mean(ys), 1.5, 0.25
     raw_slope = slope
-    slope = max(-max_slope, min(max_slope, slope))
+    if abs(slope) > max_slope:  # begrensde helling: lijn opnieuw door het (gewogen) midden van de punten leggen
+        slope = math.copysign(max_slope, slope)
+        icpt = sum(w * (y - slope * x) for x, y, w in zip(xs, ys, ws)) / sum(ws)
     fit_now = icpt  # gefitte waarde in de huidige week (x=0)
     now = max(fit_now, anchor) if anchor is not None else fit_now
 
@@ -76,7 +78,8 @@ def trend(points, today, value_key="vdot", lookback_weeks=26, max_slope=MAX_SLOP
 
     span = (max(xs) - min(xs)) if n > 1 else 0
     return {"now": now, "fit_now": fit_now, "anchored": now > fit_now, "slope": slope, "raw_slope": raw_slope, "sd": sd, "n": n, "span_weeks": span,
-            "at": at, "fit": [{"week": p["week"], "fit": round(icpt + slope * x, 2)} for p, x in zip(pts, xs)]}
+            "at": at, "fit": [{"week": (t0 + dt.timedelta(weeks=x)).isoformat(), "fit": round(icpt + slope * x, 2)}
+                    for x in range(int(min(xs)), 1)]}  # elke week, ook weken zonder punt: een doorlopende lijn
 
 
 def reliability(n_weeks, n_hard):

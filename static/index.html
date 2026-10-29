@@ -1197,8 +1197,8 @@ function renderGoalChart(g){
     {label:"band2", data:rows.map(r=>pb[r.week]?.lo??null), borderWidth:0, pointRadius:0},
     {label:"Per week", data:rows.map(r=>hb[r.week]?.t??null), showLine:false, pointRadius:3.5, pointHoverRadius:5, borderColor:W2,
       pointBackgroundColor:rows.map(r=>hb[r.week]?.prov ? "transparent" : W2), pointBorderWidth:rows.map(r=>hb[r.week]?.prov ? 1.5 : 1)},
-    {label:"Trend", data:rows.map(r=>hb[r.week]?.fit??null), borderColor:W, borderWidth:2.5, pointRadius:0, tension:.3, spanGaps:true},
-    {label:"Verwachting", data:rows.map(r=>pb[r.week]?.t??null), borderColor:W, borderWidth:2.5, borderDash:[6,5], pointRadius:0, tension:.3},
+    {label:"Trend", data:rows.map(r=>pb[r.week] ? null : hb[r.week]?.fit??null), borderColor:W, borderWidth:2.5, pointRadius:0, tension:.3, spanGaps:true},
+    {label:"Verwachting", data:rows.map((r,i)=>pb[r.week]?.t ?? (pb[rows[i+1]?.week] ? hb[r.week]?.fit : null) ?? null), borderColor:W, borderWidth:2.5, borderDash:[6,5], pointRadius:0, tension:.3},
     ...(S.goal_s ? [{label:`Doel ${g.time}`, data:rows.map(()=>S.goal_s), borderColor:GOAL, borderWidth:2, borderDash:[3,4], pointRadius:0}] : []),
   ]}, options:o});
 }
@@ -1410,8 +1410,8 @@ function renderPerformance(){
   mk("cVdot", {type:"line", data:{labels:rows.map(r=>r.label), datasets:[
     {label:"band", data:rows.map(r=>pj[r.week]?.hi??null), borderWidth:0, pointRadius:0, backgroundColor:alpha(css("--accent"),.14), fill:"+1"},
     {label:"band2", data:rows.map(r=>pj[r.week]?.lo??null), borderWidth:0, pointRadius:0},
-    {label:"Projectie", data:rows.map(r=>pj[r.week]?.v??null), borderColor:css("--accent"), borderDash:[6,5], borderWidth:2.5, pointRadius:0},
-    {label:"Trend", data:rows.map(r=>fit[r.week]??null), borderColor:css("--faint"), borderDash:[2,3], borderWidth:1.5, pointRadius:0},
+    {label:"Projectie", data:rows.map((r,i)=>pj[r.week]?.v ?? (pj[rows[i+1]?.week] ? fit[r.week] : null) ?? null), borderColor:css("--accent"), borderDash:[6,5], borderWidth:2.5, pointRadius:0},
+    {label:"Trend", data:rows.map(r=>pj[r.week] ? null : fit[r.week]??null), spanGaps:true, borderColor:css("--faint"), borderDash:[2,3], borderWidth:1.5, pointRadius:0},
     {label:"VDOT", data:rows.map(r=>r.vdot??null), borderColor:css("--blue"), backgroundColor:css("--blue"), borderWidth:2.5, tension:.3, spanGaps:true,
       pointStyle:rows.map(r=>r.src==="race"?"rectRot":"circle"), pointRadius:rows.map(r=>r.src==="race"?6:4), pointHoverRadius:7,
       pointBackgroundColor:rows.map(r=>r.prov?css("--card"):css("--blue"))},
