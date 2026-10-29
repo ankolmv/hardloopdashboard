@@ -459,7 +459,8 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
                      "slope_month": round(tr["slope"] * 4.35, 2), "raw_slope_month": round(tr["raw_slope"] * 4.35, 2)},
             "predictions": table, "projection": proj, "trend_fit": tr["fit"],
         })
-    perf["weeks"] = [{**l, "vdot": w["vdot"], "src": w["vdot_src"]} for l, w in zip(wl, weeks)]
+    this_week = M.week_start(today).isoformat()  # lopende week: voorlopig (nog niet alle runs gedaan)
+    perf["weeks"] = [{**l, "vdot": w["vdot"], "src": w["vdot_src"], "prov": l["week"] == this_week} for l, w in zip(wl, weeks)]
     perf["vo2max_weeks"] = weekly_from_daily(daily, "vo2max", weeks, max)
     perf["vo2max"] = last(daily, "vo2max")
     cutoff = (today - dt.timedelta(days=90)).isoformat()
@@ -503,7 +504,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         gt = lambda v: round(M.race_time(v, Dg) * (1 + pen)) if v else None
         fit = {f["week"]: f["fit"] for f in perf.get("trend_fit") or []}
         goal_out["series"] = {
-            "hist": [{"week": w["week"], "label": w["label"], "range": w["range"], "t": gt(w.get("vdot")), "fit": gt(fit.get(w["week"]))}
+            "hist": [{"week": w["week"], "label": w["label"], "range": w["range"], "t": gt(w.get("vdot")), "fit": gt(fit.get(w["week"])), "prov": w.get("prov")}
                      for w in perf.get("weeks") or []],
             "proj": [{"week": x["week"], "label": x["label"], "range": x["range"], "t": gt(x["v"]), "lo": gt(x["hi"]), "hi": gt(x["lo"])}
                      for x in perf.get("projection") or []],

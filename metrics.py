@@ -151,8 +151,23 @@ def best_efforts(dist, time, hr=None):
             if hr and bi:
                 vals = [h for h in hr[bi[0]:bi[1]] if h]
                 hr_avg = statistics.mean(vals) if vals else None
-            out[D] = {"time": best, "hr": hr_avg}
+            out[D] = {"time": best, "hr": hr_avg, "even": _even(dist, time, *bi) if bi else True}
     return out
+
+
+def _even(dist, time, i, j, chunk=30):
+    """Gelijkmatig gelopen? Bij blokken met (wandel)herstel zit er een traag stuk in het venster:
+    dan is de 'snelste 3 km' geen echte inspanning op die afstand."""
+    speeds, k = [], i
+    for m in range(i + 1, j + 1):
+        if time[m] - time[k] >= chunk:
+            speeds.append((dist[m] - dist[k]) / (time[m] - time[k]))
+            k = m
+    if len(speeds) < 3:
+        return True
+    # Minstens driekwart van het stuk op werktempo (binnen 8% van de snellere stukken); een korte pauze mag
+    work = sorted(speeds, reverse=True)[len(speeds) // 4]
+    return sum(v >= work / 1.08 for v in speeds) >= 0.75 * len(speeds)
 
 
 def hr_zone_seconds(hr, time, floors):
@@ -257,7 +272,7 @@ def analyze_run(a, ctx):
             v = D / e["time"]
             vd = vdot_from_race(D, e["time"])
             hr_hard = 0.95 * ctx["lthr"] if ctx.get("lthr") else 0.86 * max_hr  # ~drempelhartslag
-            hard = (e["hr"] and e["hr"] >= hr_hard) or (tp and v >= tp * EFFORT_SPEED_FACTOR[D]) or r["race"]
+            hard = e["even"] and ((e["hr"] and e["hr"] >= hr_hard) or (tp and v >= tp * EFFORT_SPEED_FACTOR[D]) or r["race"])
             r["efforts"][int(D)] = {"time": round(e["time"]), "vdot": round(vd, 2), "hard": bool(hard)}
             if hard and (r["vdot_race"] is None or vd > r["vdot_race"]):
                 r["vdot_race"] = round(vd, 2)
@@ -351,10 +366,12 @@ GROUPS = {
 def weekly_runs(runs, offset, groups="intervals"):
     LOW, MID, HIGH = GROUPS[groups]
     weeks = {}
+    # Dagen met een zware training: de dag erna ligt je hartslag hoger bij hetzelfde tempo
+    hard_days = {r["date"] for r in runs if (r.get("te_aerobic") or 0) >= 3.8 or (r.get("te_anaerobic") or 0) >= 2.0}
     for r in runs:
         ws = week_start(dt.date.fromisoformat(r["date"])).isoformat()
         w = weeks.setdefault(ws, {"week": ws, "km": 0, "minutes": 0, "runs": 0, "load": 0, "longest": 0,
-                                  "elev": 0, "trimp": 0, "race": [], "hr": [], "z": [0] * 7, "pz": [0] * 7,
+                                  "elev": 0, "trimp": 0, "race": [], "hr": [], "hr_tired": [], "z": [0] * 7, "pz": [0] * 7,
                                   **{k: [] for k in WEEK_LISTS}})
         w["km"] += r["km"]
         w["minutes"] += r["minutes"]
@@ -366,7 +383,8 @@ def weekly_runs(runs, offset, groups="intervals"):
         if r["vdot_race"]:
             w["race"].append(r["vdot_race"])
         if r["vdot_hr"] and r.get("steady", True):  # alleen runs met een gelijkmatig tempo
-            w["hr"].append(r["vdot_hr"] + offset)
+            prev = (dt.date.fromisoformat(r["date"]) - dt.timedelta(days=1)).isoformat()
+            w["hr_tired" if prev in hard_days else "hr"].append(r["vdot_hr"] + offset)
         for k, key in WEEK_LISTS.items():
             if r.get(key) is not None:
                 w[k].append(r[key])
@@ -381,7 +399,9 @@ def weekly_runs(runs, offset, groups="intervals"):
     for ws in sorted(weeks):
         w = weeks[ws]
         vr = max(w["race"]) if w["race"] else None
-        vh = statistics.median(w["hr"]) if w["hr"] else None
+        # Hartslagschatting pas bij minstens twee rustige runs; runs na een zware dag alleen als aanvulling
+        pool = w["hr"] if len(w["hr"]) >= 2 else w["hr"] + w["hr_tired"]
+        vh = statistics.median(pool) if len(pool) >= 2 else None
         use_race = vr and (not vh or vr >= vh - 1.5)
         out.append({
             "week": ws, "km": round(w["km"], 1), "hours": round(w["minutes"] / 60, 2), "runs": w["runs"],
