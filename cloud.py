@@ -101,7 +101,7 @@ def action(name, args_json):
     import app
     args = json.loads(args_json or "{}")
     fn = {"goal": app.save_goal, "settings": app.save_settings, "push_workout": app.push_workout,
-          "unpush_workout": app.unpush_workout, "garmin_zones": app.set_garmin_zones}.get(name)
+          "unpush_workout": app.unpush_workout, "save_workout": app.save_workout, "garmin_zones": app.set_garmin_zones}.get(name)
     if name in ("", "sync"):
         return
     if name == "fail_test":  # om de melding bij een mislukte run te testen

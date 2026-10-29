@@ -157,6 +157,11 @@ main{max-width:1320px;margin:0 auto;padding:20px 16px 48px}
 .step .tg{color:var(--muted);font-size:12px;text-align:right}
 .step.rep{grid-template-columns:1fr;background:none;border:1px dashed var(--line)}
 .step.rep .inner{display:grid;gap:6px}
+.sedit{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.sedit .lb{flex:1 1 140px;font-weight:600}
+.sedit label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sedit input{width:58px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;font-size:13px;font-variant-numeric:tabular-nums;text-align:center}
+.sedit input.bad{border-color:var(--red)}
 .sug-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .sug-title{font-size:20px;font-weight:750;letter-spacing:-.01em;margin:2px 0}
 .focus{display:grid;gap:12px}
@@ -574,7 +579,7 @@ async function dispatchAction(action, args){
   trackRun(action, args, token, new Date(Date.now() - 15000), 0);
   return {queued:true};
 }
-const ACTION_NL = {sync:"synchroniseren", goal:"doel opslaan", settings:"instelling opslaan", push_workout:"training naar Garmin",
+const ACTION_NL = {sync:"synchroniseren", goal:"doel opslaan", settings:"instelling opslaan", push_workout:"training naar Garmin", save_workout:"training aanpassen",
                    unpush_workout:"training van Garmin halen", garmin_zones:"zones naar Garmin"};
 async function trackRun(action, args, token, since, retries){
   busy = ACTION_NL[action] || action;
@@ -762,6 +767,57 @@ function stepRow(st){
   const lbl = st.label || {warmup:"Inlopen", cooldown:"Uitlopen", recovery:"Herstel", interval:"Blok", run:"Lopen"}[st.kind];
   return `<div class="step"><span class="t">${st.secs>=60?Math.round(st.secs/60)+" min":st.secs+" s"}</span><span>${esc(lbl)}</span><span class="tg">${tgt}</span></div>`;
 }
+// ---- dagvoorstel handmatig aanpassen (duur, herhalingen, doeltempo/-hartslag)
+const parseMS = v => { v = String(v).trim().replace(",", ":").replace(".", ":"); const m = v.match(/^(\d+)(?::(\d{1,2}))?$/); return m ? (+m[1])*60 + (+(m[2]||0)) : null; };
+const fmtMS = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,"0")}`;
+const stepSecs = st => st.reduce((a,x)=>a + (x.kind==="repeat" ? x.n*stepSecs(x.steps) : x.secs), 0);
+function stepEdit(st, path){
+  if (st.kind==="repeat") return `<div class="step rep"><div class="sedit"><span class="lb">Herhalingen</span>
+      <label><input data-p="${path}" data-f="n" value="${st.n}" inputmode="numeric">×</label></div>
+    <div class="inner">${st.steps.map((c,i)=>stepEdit(c, `${path}.${i}`)).join("")}</div></div>`;
+  const lbl = st.label || {warmup:"Inlopen", cooldown:"Uitlopen", recovery:"Herstel", interval:"Blok", run:"Lopen"}[st.kind];
+  const inp = (f, v, mode="text") => `<input data-p="${path}" data-f="${f}" value="${v}" inputmode="${mode}">`;
+  return `<div class="step" style="grid-template-columns:1fr"><div class="sedit"><span class="lb">${esc(lbl)}</span>
+    <label>duur ${inp("secs", fmtMS(st.secs))}</label>
+    ${st.pace?`<label>tempo ${inp("pace0", fmtMS(Math.min(...st.pace)))}–${inp("pace1", fmtMS(Math.max(...st.pace)))}/km</label>`:""}
+    ${st.hr?`<label>hartslag ${inp("hr0", Math.min(...st.hr), "numeric")}–${inp("hr1", Math.max(...st.hr), "numeric")}</label>`:""}</div></div>`;
+}
+function editSuggestion(sg){
+  const steps = structuredClone(sg.steps);
+  const at = p => p.split(".").reduce((o,i,k)=> k ? o.steps[+i] : o[+i], steps);
+  const box = $("#sugEdit");
+  ["#pushBtn", "#unpushBtn"].forEach(id => $(id) && ($(id).style.display = "none"));  // tijdens bewerken alleen via de knoppen hieronder
+  box.innerHTML = `<p class="cap" style="margin:0 0 4px">Duur als minuten:seconden (bijv. 5:00 of 0:45), tempo per km. Pas aan wat je wilt en sla op.</p>
+    <div class="steps">${steps.map((st,i)=>stepEdit(st, String(i))).join("")}</div>
+    <div class="muted" id="sugEditTot" style="font-size:12.5px"></div>
+    <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+      ${sg.garmin_linked?`<button class="btn primary" id="sugEditPush">Opslaan en op mijn Garmin zetten</button>`:""}
+      <button class="btn" id="sugEditSave">Alleen opslaan</button><button class="btn" id="sugEditCancel">Annuleren</button>
+      <span class="muted" id="sugEditMsg" style="font-size:12.5px"></span></div>`;
+  const tot = () => $("#sugEditTot").textContent = `Totaal ${Math.round(stepSecs(steps)/60)} min`;
+  box.querySelectorAll("input").forEach(el => el.oninput = () => {
+    const st = at(el.dataset.p), f = el.dataset.f, v = el.value;
+    let ok = true;
+    if (f==="n"){ const n = parseInt(v); ok = n>=1 && n<=30; if (ok) st.n = n; }
+    else if (f==="secs"){ const x = parseMS(v); ok = x!=null && x>=10; if (ok) st.secs = x; }
+    else if (f.startsWith("pace")){ const x = parseMS(v); ok = x!=null && x>=120 && x<=900; if (ok) st.pace[+f.slice(-1)] = x; }
+    else { const x = parseInt(v); ok = x>=60 && x<=220; if (ok) st.hr[+f.slice(-1)] = x; }
+    el.classList.toggle("bad", !ok); tot();
+  });
+  tot();
+  const go = async push => {
+    if (box.querySelector("input.bad")) { $("#sugEditMsg").textContent = "Controleer de rood omrande velden."; return; }
+    if (push && !confirm(`De aangepaste training op ${sg.weekday} ${sg.date} in je Garmin-agenda zetten?`)) return;
+    $("#sugEditMsg").textContent = "Bezig…";
+    try {
+      const r = await api(push ? "/api/push_workout" : "/api/save_workout", {date:sg.date, base:sg.base_title||sg.title, steps});
+      if (r && r.queued) $("#sugEditMsg").textContent = "Wordt via GitHub opgeslagen (1–2 min)."; else await load();
+    } catch(e){ $("#sugEditMsg").textContent = e.message; }
+  };
+  $("#sugEditSave").onclick = () => go(false);
+  $("#sugEditPush") && ($("#sugEditPush").onclick = () => go(true));
+  $("#sugEditCancel").onclick = () => renderSuggestion();
+}
 function renderSuggestion(){
   const sg = D.overview.suggestion;
   if (!sg){ $("#sugCard").innerHTML = `<h3>Training</h3><div class="empty">Nog geen suggestie: te weinig data.</div>`; return; }
@@ -771,10 +827,18 @@ function renderSuggestion(){
     : `<button class="btn primary" id="pushBtn">${svgI('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>').replace("<svg","<svg width=\"15\" height=\"15\"")}Zet op mijn Garmin</button>`;
   $("#sugCard").innerHTML = `<div class="sug-head"><div><div class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">${when}</div>
       <div class="sug-title">${esc(sg.title)}</div>${sg.minutes?`<div class="muted">${sg.minutes} min · ±${fmt(sg.est_km,1)} km</div>`:""}</div></div>
-    ${sg.steps.length?`<div class="steps">${sg.steps.map(stepRow).join("")}</div>`:""}
+    <div id="sugEdit">${sg.steps.length?`<div class="steps">${sg.steps.map(stepRow).join("")}</div>`:""}
+    ${sg.steps.length?`<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="sugEditBtn">${svgI('<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>').replace("<svg","<svg width=\"14\" height=\"14\"")}Aanpassen</button>
+      ${sg.custom?`<span class="muted" style="font-size:12.5px">Aangepast door jou · voorstel was "${esc(sg.base_title)}"</span><button class="btn" id="sugReset">Terug naar voorstel</button>`:""}</div>`:""}</div>
     <ul class="tiplist">${sg.why.map(w=>`<li class="neutral"><span class="dot">${svgI(TIP_IC.neutral)}</span><span>${esc(w)}</span></li>`).join("")}</ul>
     ${sg.pushed_other?`<p class="cap" style="margin:10px 0 0">Er staat al een andere dashboardtraining op je Garmin voor deze dag ("${esc(sg.pushed_other)}"); die wordt vervangen.</p>`:""}
     <div class="row" style="margin-top:14px">${pushBtn}<span class="muted" id="pushMsg" style="font-size:12.5px"></span></div>`;
+  $("#sugEditBtn") && ($("#sugEditBtn").onclick = () => editSuggestion(sg));
+  $("#sugReset") && ($("#sugReset").onclick = async () => {
+    if (!confirm("Je aanpassingen weggooien en terug naar het voorstel?")) return;
+    try { const r = await api("/api/save_workout", {date:sg.date, steps:null}); if (r && r.queued) $("#pushMsg").textContent = "Wordt via GitHub teruggezet (1–2 min)."; else await load(); }
+    catch(e){ $("#pushMsg").textContent = e.message; }
+  });
   $("#pushBtn") && ($("#pushBtn").onclick = async () => {
     if (!confirm(`"${sg.title}" op ${sg.weekday} ${sg.date} in je Garmin-agenda zetten? Hij synchroniseert dan naar je horloge.`)) return;
     $("#pushBtn").disabled = true; $("#pushMsg").textContent = "Bezig…";

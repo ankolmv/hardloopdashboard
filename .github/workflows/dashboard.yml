@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "Actie (sync, goal, settings, push_workout, unpush_workout, garmin_zones, fail_test)"
+        description: "Actie (sync, goal, settings, push_workout, unpush_workout, save_workout, garmin_zones, fail_test)"
         required: false
         default: "sync"
       args:

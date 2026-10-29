@@ -124,11 +124,62 @@ def _write_json(path, obj):
         json.dump(obj, f, indent=2)
 
 
+CUSTOM_PATH = os.path.join(paths.DATA, "custom_workouts.json")
+STEP_KINDS = ("warmup", "run", "interval", "recovery", "cooldown", "repeat")
+
+
+def load_custom():
+    if os.path.exists(CUSTOM_PATH):
+        with open(CUSTOM_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def _clean_steps(steps, depth=0):
+    """Handmatig aangepaste stappen controleren (alleen bekende velden, redelijke grenzen)."""
+    if not isinstance(steps, list) or not 1 <= len(steps) <= 20:
+        raise ValueError("Ongeldige training")
+    out = []
+    for s in steps:
+        kind = s.get("kind")
+        if kind not in STEP_KINDS or (kind == "repeat" and depth):
+            raise ValueError("Ongeldige stap")
+        if kind == "repeat":
+            out.append({"kind": "repeat", "n": max(1, min(30, int(s["n"]))), "steps": _clean_steps(s["steps"], 1)})
+            continue
+        c = {"kind": kind, "secs": max(10, min(4 * 3600, int(s["secs"])))}
+        if s.get("label"):
+            c["label"] = str(s["label"])[:80]
+        if s.get("pace"):
+            c["pace"] = sorted(max(120, min(900, int(v))) for v in s["pace"][:2])
+        if s.get("hr"):
+            c["hr"] = sorted(max(60, min(220, int(v))) for v in s["hr"][:2])
+        out.append(c)
+    return out
+
+
+def save_workout(body):
+    """Aangepaste versie van het dagvoorstel bewaren (steps=None: terug naar het voorstel)."""
+    date, custom = body.get("date"), load_custom()
+    if not date or date < dt.date.today().isoformat():
+        raise ValueError("Alleen een training van vandaag of later kan worden aangepast.")
+    custom = {d: c for d, c in custom.items() if d >= dt.date.today().isoformat()}  # oude opruimen
+    if body.get("steps"):
+        custom[date] = {"base": body.get("base"), "steps": _clean_steps(body["steps"]),
+                        "at": dt.datetime.now().isoformat(timespec="seconds")}
+    else:
+        custom.pop(date, None)
+    _write_json(CUSTOM_PATH, custom)
+    return {"ok": True}
+
+
 def push_workout(body):
     """Zet de suggestie (of een geplande dag uit het trainingsplan) voor `date` als workout in Garmin Connect.
 
     De server berekent alles zelf opnieuw; een eerdere dashboard-workout op die datum wordt vervangen.
     """
+    if body.get("steps"):  # aangepaste versie: eerst bewaren, daarna rekent alles daarmee
+        save_workout(body)
     p = build_payload()
     sug = p["overview"]["suggestion"]
     if not sug or sug["date"] != body.get("date"):
@@ -707,6 +758,11 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     suggestion = None
     if paces and model_rows and runs:
         suggestion = analysis.suggest(runs_m, daily_by, model_rows, paces, today, tuple(settings.get("long_days", [4, 5, 6])), plan)
+        cw = load_custom().get(suggestion["date"])
+        if cw and cw.get("base") == suggestion["title"] and suggestion["steps"]:  # handmatig aangepast (en voorstel nog hetzelfde)
+            secs = PL._secs(cw["steps"])
+            suggestion.update({"steps": cw["steps"], "base_title": suggestion["title"], "title": suggestion["title"] + " (aangepast)",
+                               "custom": True, "minutes": round(secs / 60), "est_km": round(PL._km(cw["steps"], paces), 1)})
         pace_txt(suggestion["steps"])
         pushed = load_pushed().get(suggestion["date"])
         suggestion["pushed"] = pushed if pushed and pushed.get("title") == suggestion["title"] else None
@@ -827,6 +883,8 @@ class Handler(BaseHTTPRequestHandler):
             self._guard(lambda: save_settings(body))
         elif self.path == "/api/push_workout":
             self._guard(lambda: push_workout(body))
+        elif self.path == "/api/save_workout":
+            self._guard(lambda: save_workout(body))
         elif self.path == "/api/unpush_workout":
             self._guard(lambda: unpush_workout(body))
         elif self.path == "/api/garmin_zones":
