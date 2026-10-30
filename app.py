@@ -440,6 +440,12 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     best_recent = P.recent_best(runs, today)
     tr = P.trend([{**w, "n": w["runs"]} for w in all_weeks], today,
                  anchor=best_recent["value"] if best_recent else None)
+    if tr:  # voorbije weken met dezelfde bodem als "nu": je beste inspanning tot en met die week
+        for f in tr["fit"]:
+            end = dt.date.fromisoformat(f["week"]) + dt.timedelta(days=6)
+            b = P.recent_best([r for r in runs if r["date"] <= end.isoformat()], min(end, today))
+            if b and b["value"] > f["fit"]:
+                f["fit"] = round(b["value"], 2)
     settings = load_settings()
     if hr_zones in ("model", "garmin"):  # weergavekeuze zonder de opgeslagen instelling te wijzigen
         settings = {**settings, "hr_zones": hr_zones}
