@@ -9,8 +9,8 @@ MAX_SLOPE = 0.25      # VDOT per week (~1 per maand): realistische bovengrens vo
 HALF_WEEKS = 26.0     # afvlakking: na 26 weken is de verbetering per week gehalveerd
 HORIZONS = (4, 8, 12)
 RACE_WEIGHT = 2.0     # echte (bijna) maximale inspanningen tellen zwaarder dan HR-schattingen
-ANCHOR_WEEKS = 6      # "nu" mag niet lager zijn dan je beste inspanning van de laatste 6 weken...
-ANCHOR_DECAY = 0.15   # ...min 0,15 VDOT per week dat die inspanning oud is
+ANCHOR_WEEKS = 12     # "nu" mag niet lager zijn dan je beste inspanning van de laatste 12 weken...
+ANCHOR_DECAY = 0.15   # ...min 0,15 VDOT per week, maar alleen als je sindsdien minder bent gaan trainen
 
 
 def weighted_linreg(xs, ys, ws):
@@ -30,15 +30,28 @@ def weighted_linreg(xs, ys, ws):
 
 
 def recent_best(runs, today, weeks=ANCHOR_WEEKS, decay=ANCHOR_DECAY):
-    """Beste maximale inspanning van de laatste weken, met aftrek naar ouderdom."""
+    """Beste maximale inspanning van de laatste weken.
+
+    Rustigere of gedoseerde trainingen zijn geen bewijs dat je vorm achteruitgaat: zolang je evenveel
+    blijft trainen, blijft die inspanning gelden. Pas bij minder omvang (km over 4 weken) gaat er
+    per week iets af.
+    """
+    def km_between(a, b):
+        return sum(r["km"] for r in runs if a <= dt.date.fromisoformat(r["date"]) < b)
+
+    km_now = km_between(today - dt.timedelta(days=28), today + dt.timedelta(days=1))
     best = None
     for r in runs:
         if not r.get("vdot_race"):
             continue
-        age = (today - dt.date.fromisoformat(r["date"])).days / 7
+        d = dt.date.fromisoformat(r["date"])
+        age = (today - d).days / 7
         if age > weeks:
             continue
-        v = r["vdot_race"] - decay * age
+        km_then = km_between(d - dt.timedelta(days=28), d + dt.timedelta(days=1))
+        ratio = km_now / km_then if km_then else 1.0
+        drop = min(1.0, max(0.0, (0.9 - ratio) / 0.4))  # 90% of meer van de omvang: geen aftrek; 50%: volle aftrek
+        v = r["vdot_race"] - decay * age * drop
         if best is None or v > best["value"]:
             best = {"value": v, "vdot": r["vdot_race"], "date": r["date"], "name": r.get("name"), "age_weeks": round(age, 1)}
     return best
