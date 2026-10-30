@@ -426,6 +426,34 @@ def sel(rows, keys):
 
 
 # --------------------------------------------------------------------------- payload
+def hr_pace_series(runs, ctx, floors, today, ref=145):
+    """Tempo bij een vaste hartslag uit rustige, gelijkmatige duurlopen (aerobe vorm).
+
+    Per run: gemiddeld tempo (met hellingcorrectie) en hartslag na de eerste 5 minuten, omgerekend naar
+    `ref` bpm via de hartslagreserve. Alleen runs dicht bij die hartslag: verder terugrekenen is onbetrouwbaar.
+    """
+    rest = ctx["rest_hr"]
+    top = (floors[2] - 1) if floors and len(floors) > 2 else ref + 2  # bovengrens Z2
+    hard_days = {r["date"] for r in runs if (r.get("te_aerobic") or 0) >= 3.8 or (r.get("te_anaerobic") or 0) >= 2.0}
+    cutoff = (today - dt.timedelta(weeks=26)).isoformat()
+    pts = []
+    for r in runs:
+        hr, v = r.get("steady_hr"), r.get("steady_v")
+        if r["date"] < cutoff or not (r.get("steady") and hr and v and r["minutes"] >= 20) or not ref - 15 <= hr <= top + 7:
+            continue
+        prev = (dt.date.fromisoformat(r["date"]) - dt.timedelta(days=1)).isoformat()
+        pts.append({"id": r["id"], "date": r["date"], "name": r["name"], "km": r["km"], "hr": round(hr),
+                    "pace": round(1000 / v), "at_ref": round(1000 / (v * (ref - rest) / (hr - rest))),
+                    "tired": prev in hard_days})
+    pts.sort(key=lambda x: x["date"])
+    fresh = []
+    for p in pts:  # lopende mediaan van de laatste 4 runs die niet na een zware dag vielen
+        if not p["tired"]:
+            fresh.append(p["at_ref"])
+        p["trend"] = round(statistics.median(fresh[-4:])) if fresh else None
+    return {"ref": ref, "z2_top": top, "points": pts} if len(pts) >= 2 else None
+
+
 def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     data = store.load()
     if not data:
@@ -519,6 +547,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
     this_week = M.week_start(today).isoformat()  # lopende week: voorlopig (nog niet alle runs gedaan)
     perf["weeks"] = [{**l, "vdot": w["vdot"], "src": w["vdot_src"], "prov": l["week"] == this_week} for l, w in zip(wl, weeks)]
     perf["vo2max_weeks"] = weekly_from_daily(daily, "vo2max", weeks, max)
+    perf["hr_pace"] = hr_pace_series(runs, ctx, model_floors, today)
     perf["vo2max"] = last(daily, "vo2max")
     cutoff = (today - dt.timedelta(days=90)).isoformat()
     best = {}

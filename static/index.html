@@ -384,6 +384,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   <section class="view" data-view="prestaties">
     <div class="card"><h3>Prestatieniveau en projectie</h3><p class="cap">VDOT per week (◆ = maximale inspanning, ● = schatting uit hartslag), trend en 12 weken vooruit met onzekerheidsband. Garmin VO2max ter vergelijking.</p><div class="chart" style="height:320px"><canvas id="cVdot"></canvas></div></div>
     <div class="card"><div class="row between"><div><h3>Voorspelde wedstrijdtijden</h3><p class="cap" id="predCap"></p></div></div><div class="tablewrap"><table id="predTable"></table></div></div>
+    <div class="card" id="hrPaceCard"><div class="row between"><div><h3 id="hrPaceTitle">Tempo bij vaste hartslag</h3><p class="cap" id="hrPaceCap"></p></div><span class="badge" id="hrPaceBadge"></span></div>
+      <div class="chart" style="height:260px"><canvas id="cHrPace"></canvas></div></div>
     <div class="grid g2">
       <div class="card"><h3>Beste prestaties</h3><p class="cap">Snelste stukken uit je runs, laatste 90 dagen</p><div class="tablewrap"><table id="best"></table></div></div>
       <div class="card"><h3>Garmin-fysiologie</h3><p class="cap">Lactaatdrempel en scores die je horloge berekent</p><div id="garminPhys"></div></div>
@@ -1465,7 +1467,30 @@ function weekHtml(w, title, current){
     <div class="pdays">${w.days.map(dayRow).join("")}</div>`;
 }
 
+function renderHrPace(){
+  const H = D.performance.hr_pace;
+  if (!H){ $("#hrPaceCard").style.display = "none"; return; }
+  $("#hrPaceCard").style.display = "";
+  const pts = H.points, T = s => mmss(s);
+  $("#hrPaceTitle").textContent = `Tempo bij ${H.ref} bpm`;
+  $("#hrPaceCap").innerHTML = `Uit je rustige, gelijkmatige duurlopen (hartslag tot ±${H.z2_top+7}): tempo na de eerste 5 minuten, met hellingcorrectie, omgerekend naar ${H.ref} bpm. `+
+    `Sneller = betere aerobe vorm. Open rondje = de dag na een zware training (hartslag dan vaak hoger, telt niet mee in de trend).`;
+  const tr = pts.map(p=>p.trend).filter(v=>v!=null), d = tr.length>1 ? tr.at(-1) - tr[0] : null;
+  $("#hrPaceBadge").className = `badge ${d==null||Math.abs(d)<3?"":d<0?"green":"orange"}`;
+  $("#hrPaceBadge").textContent = d==null ? `${pts.length} runs` : Math.abs(d)<3 ? `stabiel · ${T(tr.at(-1))}/km` : `${d<0?"":"+"}${d} s/km sinds ${dayLabel(pts[0].date)}`;
+  const col = css("--teal");
+  mk("cHrPace", {type:"line", data:{labels:pts.map(p=>dayLabel(p.date)), datasets:[
+    {label:`Per run (omgerekend naar ${H.ref} bpm)`, data:pts.map(p=>p.at_ref), showLine:false, pointRadius:5, pointHoverRadius:7, borderColor:col, borderWidth:2,
+      pointBackgroundColor:pts.map(p=>p.tired?css("--card"):col)},
+    {label:"Trend (laatste 4 runs)", data:pts.map(p=>p.trend), borderColor:alpha(col,.6), borderWidth:2.5, pointRadius:0, tension:.3, spanGaps:true},
+  ]}, options:opts({y:{reverse:true, ticks:{callback:v=>T(v)}, title:{display:true, text:"min/km"}},
+    extra:{onClick:(e,els)=>{ const el = els.find(x=>x.datasetIndex===0); if (el) openRun(pts[el.index].id); },
+      plugins:{legend:{display:true, position:"top", align:"end", labels:{boxWidth:8, boxHeight:8, usePointStyle:true, padding:14}},
+      tooltip:{callbacks:{title:safeTitle(items=>{ const p = pts[items[0].dataIndex]; return `${dayLabel(p.date)} · ${p.name}`; }),
+        label:c=>{ const p = pts[c.dataIndex]; return c.datasetIndex ? `Trend: ${T(c.raw)}/km` : [`Bij ${H.ref} bpm: ${T(p.at_ref)}/km`, `Gelopen: ${T(p.pace)}/km bij ${p.hr} bpm · ${fmt(p.km,1)} km`, ...(p.tired?["Dag na een zware training"]:[])]; }}}}}})});
+}
 function renderPerformance(){
+  renderHrPace();
   const P = D.performance, W = P.weeks, proj = P.projection||[];
   const rows = [...W, ...proj.filter(p=>!W.some(w=>w.week===p.week))];
   const idx = Object.fromEntries(rows.map((r,i)=>[r.week,i]));

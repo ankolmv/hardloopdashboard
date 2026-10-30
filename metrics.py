@@ -296,6 +296,7 @@ def analyze_run(a, ctx):
             if hrr and 0.5 <= hrr <= 0.92:
                 r["vdot_hr"] = round((vo2_at_speed(v_mmin) - 3.5) / hrr + 3.5, 2)
             r["ef"] = round(v_mmin / h_mean, 4)
+            r["steady_v"], r["steady_hr"] = round(v_mmin / 60, 3), round(h_mean, 1)  # gemiddelde na 5 min (m/s, hellingcorrectie)
             if mins >= 45:
                 half = len(idx) // 2
                 ef = lambda ids: statistics.mean(vel[i] for i in ids) / statistics.mean(hr[i] for i in ids)
