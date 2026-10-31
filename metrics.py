@@ -280,23 +280,33 @@ def analyze_run(a, ctx):
     if mins >= 20 and hr and vel and time:
         idx = [i for i, t in enumerate(time) if t >= 300 and hr[i] and vel[i] and vel[i] > 1.5]
         if len(idx) > 300:
-            v_mean = statistics.mean(vel[i] for i in idx)
-            h_mean = statistics.mean(hr[i] for i in idx)
-            gap_ratio = (a["gap"] / a["pace"]) if a.get("gap") and a.get("pace") else 1.0
-            v_mmin = v_mean * gap_ratio * 60
-            hrr = (h_mean - rest) / (max_hr - rest) if max_hr > rest else None
             # Gelijkmatig tempo? (variatie van het tempo per minuut). Bij blokken + herstel loopt de hartslag achter
             # en klopt de verhouding tempo/hartslag niet: dan telt de hartslagschatting niet mee voor je week-VDOT.
             per_min = {}
             for i in idx:
                 per_min.setdefault(time[i] // 60, []).append(vel[i])
-            mins_v = [statistics.mean(x) for x in per_min.values() if len(x) > 20]
+            mv = {m: statistics.mean(x) for m, x in per_min.items() if len(x) > 20}
+            # Snel einde of versnellingen na afloop (alleen in de laatste 10 minuten) buiten beschouwing laten:
+            # de rest van de run is dan gewoon een rustige duurloop. Sprints midden in de run blijven meetellen.
+            med = statistics.median(mv.values()) if mv else 0
+            fast = {m for m, x in mv.items() if x > 1.1 * med}
+            if fast and min(fast) >= max(mv) - 10:
+                first = min(fast)
+                idx = [i for i in idx if time[i] // 60 < first]
+                mv = {m: x for m, x in mv.items() if m < first}
+                r["fast_finish_min"] = len(fast)
+            mins_v = list(mv.values())
             r["pace_cv"] = round(statistics.pstdev(mins_v) / statistics.mean(mins_v), 3) if len(mins_v) > 5 else None
             r["steady"] = r["pace_cv"] is not None and r["pace_cv"] < 0.06
+            v_mean = statistics.mean(vel[i] for i in idx)
+            h_mean = statistics.mean(hr[i] for i in idx)
+            gap_ratio = (a["gap"] / a["pace"]) if a.get("gap") and a.get("pace") else 1.0
+            v_mmin = v_mean * gap_ratio * 60
+            hrr = (h_mean - rest) / (max_hr - rest) if max_hr > rest else None
             if hrr and 0.5 <= hrr <= 0.92:
                 r["vdot_hr"] = round((vo2_at_speed(v_mmin) - 3.5) / hrr + 3.5, 2)
             r["ef"] = round(v_mmin / h_mean, 4)
-            r["steady_v"], r["steady_hr"] = round(v_mmin / 60, 3), round(h_mean, 1)  # gemiddelde na 5 min (m/s, hellingcorrectie)
+            r["steady_v"], r["steady_hr"] = round(v_mmin / 60, 3), round(h_mean, 1)  # gemiddelde na 5 min, zonder snelle stukken (m/s, hellingcorrectie)
             if mins >= 45:
                 half = len(idx) // 2
                 ef = lambda ids: statistics.mean(vel[i] for i in ids) / statistics.mean(hr[i] for i in ids)
