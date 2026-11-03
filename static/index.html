@@ -513,19 +513,21 @@ function toast(msg, ms=4000){ const t = document.createElement("div"); t.classNa
 // Repository afleiden uit de URL (<eigenaar>.github.io/<repo>/)
 const REPO = location.hostname.endsWith(".github.io") ? `${location.hostname.split(".")[0]}/${location.pathname.split("/").filter(Boolean)[0]||""}` : "";
 const WORKFLOW = "dashboard.yml";
-async function latestBuildId(){
-  // Nieuwste geslaagde run = nieuwste build. Publieke API, geen token nodig (met token als die er is: hogere limiet).
+async function recentBuildIds(){
+  // Recente geslaagde runs, nieuwste eerst. Niet elke run publiceert (alleen bij wijzigingen), dus de pagina
+  // zoekt daarna de nieuwste run waarvan de data er echt staat. Publieke API (met token: hogere limiet).
   const t = store.get("gh_token","") || CFG_TOKEN;
-  const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/runs?status=success&per_page=1`,
+  const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/runs?status=success&per_page=15`,
     {headers: t ? {Authorization:`Bearer ${t}`} : {}});
   if (!r.ok) throw new Error(`API ${r.status}`);
-  return String((await r.json()).workflow_runs?.[0]?.id || "");
+  return ((await r.json()).workflow_runs || []).map(x => String(x.id));
 }
 async function fetchMeta(buildId){
-  let id = buildId;
-  if (!id && REPO) { try { id = await latestBuildId(); } catch {} }
-  if (id) { const r = await fetch(`data/${id}/meta.json`); if (r.ok) return META = await r.json(); }
-  return META = await fetch(`data/meta.json`).then(r=>r.json());  // terugval (kan tot 10 min oud zijn)
+  let ids = buildId ? [buildId] : [];
+  if (buildId) { const r = await fetch(`data/${buildId}/meta.json`, {cache:"no-store"}); if (r.ok) return META = await r.json(); }
+  if (REPO) { try { ids = await recentBuildIds(); } catch {} }
+  for (const id of ids) { const r = await fetch(`data/${id}/meta.json`, {cache:"no-store"}); if (r.ok) return META = await r.json(); }
+  return META = await fetch(`data/meta.json`, {cache:"no-store"}).then(r=>r.json());  // terugval
 }
 let CFG_TOKEN = "";
 async function decryptFile(name, key=CK){
