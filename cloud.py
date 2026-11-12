@@ -163,6 +163,12 @@ def build(out):
         html = f.read()
     html = html.replace("<script>\n// ===================================================================== utils",
                         "<script>window.HS_STATIC = true;</script>\n<script>\n// ===================================================================== utils", 1)
+    # Tabblad Kracht & yoga staat in een apart script; versie in de URL zodat de browser geen oude kopie gebruikt
+    with open(os.path.join(HERE, "static", "kracht.js"), "rb") as f:
+        kracht = f.read()
+    with open(os.path.join(out, "kracht.js"), "wb") as f:
+        f.write(kracht)
+    html = html.replace('src="kracht.js"', f'src="kracht.js?v={hashlib.sha256(kracht).hexdigest()[:10]}"', 1)
     with open(os.path.join(out, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
     with open(os.path.join(out, ".nojekyll"), "w") as f:

@@ -17,6 +17,7 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 | Prestaties | VDOT-trend + projectie, Garmin VO2max, voorspelde tijden (model vs Garmin), beste stukken, lactaatdrempel, Endurance/Hill Score |
 | Training | Omvang, CTL/ATL/TSB, zones (HR/tempo), Training Effect, RPE vs belasting, scenario-schuif |
 | Herstel | Training Readiness, HRV met baseline, slaap(fasen), Body Battery, stress, rusthartslag, HR-herstel |
+| Kracht & yoga | Kies per dag yoga, kracht of beide (kort/middel/lang); sessiespeler met bewegende poppetjes, timer en herhalingsteller; opbouw in fases; uitleg per oefening (waarom, stappen, wat je voelt, fouten, makkelijker/zwaarder) |
 | Techniek | Cadans, paslengte, verticale oscillatie/ratio, grondcontact, vermogen en efficiëntie, tempo bij vaste HR |
 | Activiteiten | Alle runs; klik voor verloop, splits per km, beste stukken |
 
@@ -32,8 +33,9 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 | `plan.py` | Trainingsplan: fase, weekomvang, indeling over je dagen, uitleg, volgende week, bijsturen bij gemiste trainingen |
 | `insights.py` | Inzichten in gewone taal |
 | `app.py` (`build_payload`) + `static/index.html` | Server en dashboard |
+| `static/kracht.js` | Tabblad Kracht & yoga: oefeningen met poppetje-animaties (SVG), sessies samenstellen, opbouw en speler |
 | `goal.json` | Je doel: `{"type": "event", "distance_km": 21.1, "time": "1:45:00", "date": "2027-03-14", "name": "..."}` (tijd, datum en naam optioneel; `type: "general"` zonder datum) |
-| `settings.json` | `run_days`/`long_days` (0 = maandag), `plan_start` (begin 4-weekse cyclus), `home`, `hr_zones` |
+| `settings.json` | `run_days`/`long_days` (0 = maandag), `plan_start` (begin 4-weekse cyclus), `home`, `hr_zones`, `mobility.log` (gedane kracht/yoga-sessies) |
 
 ## Hoe de cijfers tot stand komen
 - **VDOT (Daniels & Gilbert)** uit (bijna) maximale stukken en uit rustige runs via hartslagreserve, gekalibreerd op je echte inspanningen.
@@ -41,6 +43,17 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 - **Duurcorrectie**: vanaf 10 km geleidelijk extra tijd bij weinig km/week of korte lange duurlopen.
 - **Trainingsplan**: weekomvang = gemiddelde van 4 weken, +7%/week (max +10% boven je zwaarste recente week), elke 4e week −25% (algemeen doel). Bij een evenement: basis → opbouw → specifiek (4 weken) → taper (1/2/3 weken voor ≤10 km/halve/hele marathon) → wedstrijdweek. Lange duurloop 30–38% van de week (plafond per afstand), 1–2 kwaliteitstrainingen niet naast elkaar of naast de lange run, ±75–80% rustig. Wat je deze week al liep ligt vast (ook op andere dagen of een andere training dan gepland); de rest van de week wordt daarop opnieuw ingedeeld: resterende kwaliteitstrainingen, de lange duurloop als die nog niet gedaan is en de resterende kilometers, nooit twee zware dagen achter elkaar. Garmins trainingsbalans (laag aeroob / hoog aeroob / anaeroob over 4 weken, met doelbereik) stuurt het plan bij in basis- en opbouwfase: tekort anaeroob → snelheidstraining (korte bijna-maximale stukken), te veel hoog aeroob → minder drempel/VO2max, tekort laag aeroob → één kwaliteitstraining minder. Trainingsdagen zijn per week aan te passen (`week_days` in settings.json).
 - **Garmin Connect** gaat via de onofficiële `garminconnect`-library; als Garmin iets wijzigt valt alleen dat deel weg.
+
+## Kracht & yoga
+Oefeningen zonder gewichten tegen stijfheid van fietsen en hardlopen. Kies per dag **yoga**, **kracht** of **beide** en de duur
+(kort ~10, middel ~20, lang ~30 min); het dashboard stelt de sessie samen (opwarmen → oefeningen → ontspannen) en begeleidt je
+met een bewegend poppetje (oranje = de spieren die werken of rekken), aftellen, herhalingen tellen, piepjes en "wissel van kant".
+- **Opbouw** per onderdeel (kracht en yoga apart) op basis van het aantal gedane sessies, niet van kalenderweken:
+  Kennismaken → Basis (6 punten) → Opbouwen (+8) → Sterker (+10) → Onderhoud (+10). Na elke sessie: *goed* = 1 punt,
+  *te makkelijk* = 2, *te zwaar* = 0; twee keer achter elkaar te zwaar = een fase terug. Per fase andere varianten, rondes, herhalingen en tijden.
+- Sessies worden bewaard in `settings.json` (`mobility.log`), dus op alle apparaten. Online gaat dat via de GitHub-workflow
+  (een paar minuten); tot die tijd staat de sessie al op het apparaat zelf.
+- Testen zonder te wachten: open het dashboard met `?kyfast` (timers en animaties 10× sneller).
 
 ## Looproutes
 Op Overzicht maakt het dashboard een route vanaf je startpunt: een rondje of heen-en-terug, met de eerste helft

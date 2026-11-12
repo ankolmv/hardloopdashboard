@@ -62,7 +62,9 @@ nav.tabs::-webkit-scrollbar{display:none}
   .brand{flex-basis:100%}
   .ctrl{width:100%;justify-content:flex-end}
   nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;background:var(--card);border-top:1px solid var(--line);justify-content:space-around;padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
-  .tab{flex-direction:column;gap:2px;font-size:10.5px;padding:6px 4px;border:0;flex:1;min-width:0}
+  .tab{flex-direction:column;gap:2px;font-size:10.5px;padding:6px 4px;border:0;flex:1 0 auto;min-width:50px}
+  nav.tabs{justify-content:flex-start;overflow-x:auto;scroll-snap-type:x proximity}  /* 9 tabs: op smalle schermen horizontaal scrollen */
+  .tab{scroll-snap-align:center}
   .tab svg{width:20px;height:20px}
   .tab .full{display:none}
   main{padding-bottom:90px!important}
@@ -319,6 +321,155 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .skeleton{background:linear-gradient(90deg,var(--chip),var(--bg2),var(--chip));background-size:200% 100%;animation:sh 1.2s infinite;border-radius:var(--radius);min-height:120px}
 @keyframes sh{to{background-position:-200% 0}}
 .spin{animation:rot 1s linear infinite}@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ---------- kracht & yoga ---------- */
+[data-view="kracht"]{grid-template-columns:minmax(0,1fr)}
+[data-view="kracht"]>*{min-width:0}
+[data-view="kracht"] .more{grid-template-columns:minmax(0,1fr)}
+.ky-p-intro>.btn:not(.ky-go){justify-self:start}
+.ky-fig{width:100%;height:auto;display:block;overflow:visible}
+.ky-fig .ky-l{stroke:var(--text);stroke-width:5.5;stroke-linecap:round;fill:none}
+.ky-fig .ky-torso{stroke-width:7}
+.ky-fig .ky-foot{stroke-width:4.5}
+.ky-fig .ky-far .ky-l{stroke:var(--faint);opacity:.75}
+.ky-fig .ky-head{fill:var(--text)}
+.ky-fig .ky-hl{stroke:var(--accent);stroke-width:6;stroke-linecap:round;fill:none;animation:kyPulse 1.6s ease-in-out infinite}
+.ky-fig .ky-far .ky-hl{opacity:.6}
+.ky-fig .ky-torso.ky-hl{stroke-width:7.5}
+.ky-fig .ky-hlc{fill:var(--accent);opacity:.8;animation:kyPulse 1.6s ease-in-out infinite}
+.ky-fig .ky-floor{stroke:var(--line);stroke-width:2}
+.ky-fig .ky-mat{fill:color-mix(in srgb,var(--teal) 22%,transparent)}
+.ky-fig .ky-prop line{stroke:var(--faint);stroke-width:3;stroke-linecap:round}
+.ky-fig .ky-wall{fill:var(--line)}
+.ky-fig .ky-step{fill:var(--chip);stroke:var(--faint);stroke-width:1.5}
+.ky-fig .ky-strap{stroke:var(--blue);stroke-width:2;stroke-dasharray:3 2}
+.ky-fig .ky-note{fill:var(--faint);font-size:8px}
+@keyframes kyPulse{50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){.ky-fig .ky-hl,.ky-fig .ky-hlc{animation:none}}
+.ky-cue{text-align:center;font-weight:600;color:var(--accent);min-height:1.5em;font-size:13.5px}
+.ky-types{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:4px 0 12px}
+.ky-type{border:2px solid var(--line);background:var(--card);border-radius:14px;padding:14px 10px;cursor:pointer;display:grid;justify-items:center;gap:3px;text-align:center;color:var(--text)}
+.ky-type b{font-size:15px}.ky-type>span:last-child{font-size:12px;color:var(--muted)}
+.ky-type-ic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+.ky-type-ic svg{width:24px;height:24px}
+.ky-type.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 7%,var(--card))}
+.ky-lenrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.ky-lenrow .seg{flex-wrap:wrap}
+.ky-plan{display:grid;gap:12px}
+.ky-block-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.ky-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ky-item{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);cursor:pointer;text-align:left;color:var(--text)}
+.ky-item:hover,.ky-card:hover,.ky-var:hover{border-color:var(--accent)}
+.ky-item>span{display:grid;font-size:12.5px;line-height:1.3;min-width:0}
+.ky-start{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.ky-go{font-size:15px;padding:11px 20px;font-weight:700}
+.ky-go svg{width:16px;height:16px;fill:currentColor}
+.ky-done{display:grid;gap:6px;margin:0 0 12px}
+.ky-done-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border-radius:12px;background:color-mix(in srgb,var(--green) 10%,transparent)}
+.ky-done-row .ky-undo{margin-left:auto;font-size:12px;padding:4px 9px}
+.ky-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.ky-track{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--bg2)}
+.ky-phases{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:12px 0 10px;position:relative}
+.ky-ph{display:grid;justify-items:center;gap:4px;text-align:center}
+.ky-ph-dot{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12.5px;background:var(--chip);color:var(--muted);border:2px solid var(--line)}
+.ky-ph.done .ky-ph-dot{background:var(--c);border-color:var(--c);color:#fff}
+.ky-ph.on .ky-ph-dot{border-color:var(--c);color:var(--c);background:var(--card);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 20%,transparent)}
+.ky-ph-n{font-size:11px;color:var(--muted);line-height:1.2}
+.ky-ph.on .ky-ph-n{color:var(--text);font-weight:650}
+.ky-bar{height:8px;border-radius:99px;background:var(--chip);overflow:hidden;margin-bottom:6px}
+.ky-bar span{display:block;height:100%;border-radius:99px;transition:width .4s}
+.ky-track .cap{margin:0 0 6px}
+.ky-phtxt{margin:0;font-size:13px}
+.ky-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px;max-width:420px}
+.ky-cal-h{font-size:11px;color:var(--faint);text-align:center}
+.ky-cal-d{aspect-ratio:1;border-radius:8px;background:var(--chip);display:flex;align-items:center;justify-content:center;gap:2px;flex-wrap:wrap;padding:2px}
+.ky-cal-d i,.ky-legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.ky-cal-d.today{outline:2px solid var(--accent);outline-offset:-2px}
+.ky-cal-d.fut{opacity:.35}
+.ky-legend{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--muted)}
+.ky-legend span{display:inline-flex;align-items:center;gap:5px}
+.ky-lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.ky-card{border:1px solid var(--line);border-radius:14px;background:var(--bg2);padding:8px 8px 10px;cursor:pointer;display:grid;gap:2px;text-align:left;color:var(--text)}
+.ky-card b{font-size:13px}.ky-card .muted{font-size:11.5px}
+.ky-basics{display:grid;gap:14px}
+.ky-bas{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start}
+.ky-bas-ic{font-size:24px;line-height:40px;text-align:center;background:var(--chip);border-radius:12px}
+.ky-bas p{margin:3px 0 0;color:var(--muted);font-size:13px}
+.ky-ok{color:var(--green);font-weight:700}.ky-mid{color:var(--orange);font-weight:700}.ky-bad{color:var(--red);font-weight:700}
+.ky-hero .ky-fig.big{max-width:420px;margin:0 auto}
+.ky-steps{display:grid;gap:10px}
+.ky-step{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
+.ky-step .ky-fig{background:var(--bg2);border-radius:12px}
+.ky-num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:12px;margin-right:8px}
+.ky-feel{display:grid;grid-template-columns:minmax(120px,200px) 1fr;gap:14px;align-items:center}
+.ky-feel-row{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:6px}
+.ky-feel-row i{width:14px;height:6px;border-radius:3px;background:var(--accent)}
+.ky-mis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.ky-mis-p{border-radius:12px;padding:6px;display:grid;gap:4px;text-align:center;font-weight:650;font-size:12.5px}
+.ky-mis-p.good{background:color-mix(in srgb,var(--green) 10%,transparent);color:var(--green)}
+.ky-mis-p.bad{background:color-mix(in srgb,var(--red) 10%,transparent);color:var(--red)}
+.ky-mis + .cap{margin:6px 0 12px !important}
+.ky-mis-t{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start;margin:8px 0}
+.ky-x{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red);font-weight:700}
+.ky-vars{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.ky-var{border:1px solid var(--line);border-radius:12px;background:var(--bg2);padding:8px;cursor:pointer;display:grid;gap:3px;text-align:left;color:var(--text);justify-items:start}
+.ky-var>span{font-size:12px;color:var(--muted)}
+.ky-var.cur{border:2px solid var(--accent)}
+/* speler */
+.ky-player{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;overflow-y:auto;padding:0 16px calc(16px + env(safe-area-inset-bottom))}
+.ky-p-prog{height:5px;background:var(--chip);margin:0 -16px}
+.ky-p-prog span{display:block;height:100%;background:var(--accent);transition:width .3s}
+.ky-p-top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0 6px;max-width:1000px;width:100%;margin:0 auto}
+.ky-p-top .muted{font-size:12.5px}
+.ky-p-main{flex:1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,1fr);gap:24px;align-items:center;max-width:1000px;width:100%;margin:0 auto}
+.ky-p-stage{display:grid;gap:6px;justify-items:center}
+.ky-p-stage .ky-fig{max-width:560px;width:100%}
+.ky-p-main.rest .ky-p-stage{align-self:center}
+.ky-p-info{display:grid;gap:14px;align-content:center}
+.ky-count{display:flex;justify-content:center}
+.ky-ring{position:relative;width:150px;height:150px}
+.ky-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ky-ring-bg{fill:none;stroke:var(--chip);stroke-width:10}
+.ky-ring-fg{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .2s linear}
+.ky-ring-t{position:absolute;inset:0;display:grid;place-items:center;font-size:44px;font-weight:800;font-variant-numeric:tabular-nums}
+.ky-reps{font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.ky-reps small{font-size:22px;color:var(--muted);font-weight:600;margin-left:6px}
+.ky-one{margin:0;text-align:center;font-size:15px}
+.ky-more{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.ky-more summary{cursor:pointer;font-weight:650}
+.ky-more ol{margin:8px 0;padding-left:20px;display:grid;gap:4px}
+.ky-ctrl{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.ky-ctrl .btn{padding:11px 16px;font-size:14px}
+.ky-ctrl .btn.primary{font-weight:700;min-width:140px;justify-content:center}
+.ky-next{display:grid;grid-template-columns:140px 1fr;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px}
+.ky-next .cap{margin:4px 0 0;color:var(--muted);font-size:12.5px}
+.ky-p-intro{max-width:620px;width:100%;margin:20px auto;display:grid;gap:14px}
+.ky-p-intro h2{margin:0;font-size:24px}
+.ky-p-intro ul{margin:0;padding-left:20px;display:grid;gap:6px;color:var(--muted)}
+.ky-p-list{display:grid;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.ky-p-intro .ky-go{justify-self:start}
+.ky-feelbtns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ky-fb{border:2px solid var(--line);border-radius:14px;background:var(--card);padding:14px 10px;cursor:pointer;display:grid;gap:4px;text-align:center;color:var(--text)}
+.ky-fb b{font-size:15px}.ky-fb span{font-size:12px;color:var(--muted)}
+.ky-fb:hover{border-color:var(--accent)}
+.ky-up{border-radius:14px;padding:12px 14px;background:color-mix(in srgb,var(--green) 12%,transparent)}
+.ky-up.down{background:color-mix(in srgb,var(--orange) 14%,transparent)}
+.ky-up p{margin:4px 0 0;font-size:13px}
+.ky-p-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:20px;z-index:61}
+.ky-p-box{background:var(--card);border-radius:18px;padding:20px;display:grid;gap:10px;width:min(380px,100%)}
+.ky-p-box h3,.ky-p-box p{margin:0}
+@media (max-width:760px){
+  .ky-types{gap:6px}.ky-type{padding:10px 4px}.ky-type>span:last-child{display:none}
+  .ky-p-main{grid-template-columns:1fr;gap:10px;align-content:start}
+  .ky-p-stage .ky-fig{max-width:100%}
+  .ky-ring{width:110px;height:110px}.ky-ring-t{font-size:34px}.ky-reps{font-size:48px}
+  .ky-step{grid-template-columns:96px 1fr}
+  .ky-feel{grid-template-columns:110px 1fr}
+  .ky-next{grid-template-columns:100px 1fr}
+  .ky-feelbtns{grid-template-columns:1fr}
+  .ky-items{grid-template-columns:1fr 1fr}
+  .ky-lib{grid-template-columns:repeat(2,1fr)}
+}
 </style>
 </head>
 <body>
@@ -460,6 +611,25 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     </div>
   </section>
 
+  <!-- KRACHT & YOGA (logica in kracht.js) -->
+  <section class="view" data-view="kracht">
+    <div class="card" id="kyToday"></div>
+    <div class="card" id="kyProgress"></div>
+    <details class="more" data-k="kybasics"><summary><b>Voor beginners: zo werkt het</b><span class="hint">herhalingen, ademen, pijn of rek, wat heb je nodig</span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="card ky-basics">
+        <div class="ky-bas"><span class="ky-bas-ic">🔁</span><div><b>Herhaling, ronde en rust</b><p>Een <b>herhaling</b> is één keer de beweging (één keer zakken en omhoog). Een <b>ronde</b> is alle oefeningen één keer achter elkaar. Tussen de oefeningen zit <b>rust</b>: gebruik die om rustig te ademen. Het dashboard telt en timet alles voor je.</p></div></div>
+        <div class="ky-bas"><span class="ky-bas-ic">🌬️</span><div><b>Ademen</b><p>Houd nooit je adem in. Bij kracht adem je <b>uit</b> tijdens het zware deel (omhoog duwen) en <b>in</b> tijdens het terugkomen. Bij yoga adem je rustig door je neus; bij elke uitademing laat je iets meer los.</p></div></div>
+        <div class="ky-bas"><span class="ky-bas-ic">🚦</span><div><b>Rek, spierpijn of echte pijn?</b><p><span class="ky-ok">Goed:</span> een trekkend of rekkend gevoel in de spier, of een brandend gevoel bij de laatste herhalingen.<br>
+          <span class="ky-mid">Normaal:</span> spierpijn 1–2 dagen later, vooral de eerste weken.<br>
+          <span class="ky-bad">Stop:</span> scherpe of stekende pijn, pijn in een gewricht (knie, rug), tintelingen of duizeligheid. Kies dan de makkelijkere variant of sla de oefening over.</p></div></div>
+        <div class="ky-bas"><span class="ky-bas-ic">🧘</span><div><b>Wat heb je nodig?</b><p>Een matje of handdoek op de grond, een stevige stoel, een stuk vrije muur, een traptrede, en een riem of handdoek voor de rekoefeningen. Makkelijke kleding, blote voeten of sportschoenen.</p></div></div>
+        <div class="ky-bas"><span class="ky-bas-ic">📅</span><div><b>Wanneer?</b><p>Advies: <b>2× per week kracht</b> en <b>2–3× per week yoga</b> (kort mag!). Kracht doe je bij voorkeur op een rustige dag of na een rustige run, niet vlak vóór een zware training of lange duurloop. Yoga kan altijd, ook 's avonds na een training.</p></div></div>
+        <div class="ky-bas"><span class="ky-bas-ic">📈</span><div><b>Hoe werkt de opbouw?</b><p>Je begint in fase 1 met de makkelijkste varianten. Na elke sessie geef je aan hoe het voelde. Ging het goed, dan kom je dichter bij de volgende fase (te makkelijk telt dubbel). Was het twee keer achter elkaar te zwaar, dan ga je een fase terug. Kracht en yoga hebben elk hun eigen opbouw.</p></div></div>
+      </div>
+    </details>
+    <div class="card" id="kyLib"></div>
+  </section>
+
   <!-- ACTIVITEITEN -->
   <section class="view" data-view="activiteiten">
     <div class="row between"><input class="search" id="q" placeholder="Zoek op naam of datum…"><span class="muted" id="actCount"></span></div>
@@ -470,6 +640,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 <div class="drawer-bg" id="drawerBg"></div>
 <aside class="drawer" id="drawer"><div class="head"><div><b id="dTitle"></b><div class="muted" id="dSub" style="font-size:12.5px"></div></div><button class="btn icon" id="dClose">✕</button></div><div class="body" id="dBody"></div></aside>
 
+<script src="kracht.js"></script>
 <script>
 // ===================================================================== utils
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -493,8 +664,9 @@ const ICONS = {
   techniek:'<circle cx="13" cy="4" r="2"/><path d="M7 21l3-6 3 2v4M10 15l1-5 4 3 3-1M6 12l3-3 3 1"/>',
   zones:'<path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M12 6a6 6 0 100 12 6 6 0 000-12z"/><circle cx="12" cy="12" r="2"/>',
   activiteiten:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  kracht:'<path d="M6 7v10M18 7v10M3 9.5v5M21 9.5v5M6 12h12"/>',
 };
-const TAB_NAMES = {overzicht:"Overzicht", plan:"Trainingsplan", prestaties:"Prestaties", training:"Training", herstel:"Herstel", techniek:"Techniek", zones:"Zones", activiteiten:"Activiteiten"};
+const TAB_NAMES = {overzicht:"Overzicht", plan:"Trainingsplan", prestaties:"Prestaties", training:"Training", herstel:"Herstel", kracht:"Kracht & yoga", techniek:"Techniek", zones:"Zones", activiteiten:"Activiteiten"};
 const svgI = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 const INS_IC = {good:'<path d="M20 6L9 17l-5-5"/>', warn:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>', neutral:'<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>', info:'<path d="M12 2l3 7h7l-5.5 4.5 2 7.5-6.5-4.5L5.5 21l2-7.5L2 9h7z"/>'};
 
@@ -1154,6 +1326,7 @@ function render(){
   const rel = D.performance.reliability;
   $("#banner").innerHTML = rel.level === "hoog" ? "" : `<div class="banner ${rel.level}"><span class="badge ${rel.level==="laag"?"orange":"blue"}">Betrouwbaarheid ${rel.level}</span><span class="muted">${rel.weeks} weken met loopdata, ${rel.hard_efforts} (bijna) maximale inspanningen. ${esc(rel.text)}</span></div>`;
   renderOverview(); renderPlan(); renderPerformance(); renderTraining(); renderRecovery(); renderTechnique(); renderZones(); renderActivities();
+  try { renderKracht(); } catch(e){ console.error(e); $("#kyToday").innerHTML = `<div class="banner err">Kracht &amp; yoga kon niet laden: ${esc(e.message)}</div>`; }
   $$(".tiles").forEach(t => t.dataset.n = t.children.length);
 }
 
@@ -1826,13 +1999,15 @@ const prettify = s => { s = String(s).replace(/_\d+$/,"").replace(/_/g," ").toLo
 // ===================================================================== tabs & acties
 function showTab(t){
   $$(".tab").forEach(b => b.classList.toggle("on", b.dataset.t===t));
+  const tb = $(`.tab[data-t="${t}"]`), nav = $("#tabs");  // actieve tab in beeld in de (scrollbare) balk onderin
+  if (tb && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = tb.offsetLeft - (nav.clientWidth - tb.offsetWidth) / 2;
   $$(".view").forEach(v => v.classList.toggle("on", v.dataset.view===t));
   store.set("tab", t);
   Object.values(charts).forEach(c => c.resize());
   if (RT.map) setTimeout(() => RT.map.invalidateSize(), 60);
   window.scrollTo({top:0});
 }
-const TAB_SHORT = {plan:"Plan", prestaties:"Prestatie", activiteiten:"Runs"};
+const TAB_SHORT = {plan:"Plan", prestaties:"Prestatie", kracht:"Kracht", activiteiten:"Runs"};
 $("#tabs").innerHTML = Object.keys(TAB_NAMES).map(t=>`<button class="tab" data-t="${t}">${svgI(ICONS[t])}<span class="${TAB_SHORT[t]?"full":""}">${TAB_NAMES[t]}</span>${TAB_SHORT[t]?`<span class="short">${TAB_SHORT[t]}</span>`:""}</button>`).join("");
 $$(".tab").forEach(b => b.onclick = () => showTab(b.dataset.t));
 $("#q").oninput = () => D && renderActivities();
