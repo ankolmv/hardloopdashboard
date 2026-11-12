@@ -102,9 +102,46 @@ def save_settings(body):
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             raise ValueError("Startpunt ligt buiten het geldige bereik.")
         s["home"] = [round(lat, 6), round(lon, 6)]
+    if body.get("mobility_add") or body.get("mobility_remove"):  # tabblad Kracht & yoga: logboek van sessies
+        log = list((s.get("mobility") or {}).get("log") or [])
+        for e in body.get("mobility_add") or []:
+            log.append(_mobility_entry(e))
+        rm = body.get("mobility_remove")
+        if rm:  # {"date": ..., "at": ...}: precies die sessie weghalen
+            log = [e for e in log if not (e.get("date") == rm.get("date") and e.get("at") == rm.get("at"))]
+        seen, uniq = set(), []
+        for e in sorted(log, key=lambda e: (e["date"], e.get("at") or "")):  # dubbele (opnieuw verstuurde) sessies weg
+            k = (e["date"], e.get("at"))
+            if k not in seen:
+                seen.add(k)
+                uniq.append(e)
+        s["mobility"] = {"log": uniq[-400:]}
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(s, f, indent=2)
     return s
+
+
+def _mobility_entry(e):
+    """Eén gedane sessie (yoga/kracht) controleren en opschonen."""
+    if not isinstance(e, dict):
+        raise ValueError("Ongeldige sessie.")
+    try:
+        date = dt.date.fromisoformat(str(e.get("date"))).isoformat()
+    except ValueError:
+        raise ValueError("Ongeldige datum voor de sessie.")
+    if e.get("type") not in ("yoga", "kracht", "beide"):
+        raise ValueError("Kies yoga, kracht of beide.")
+    feel = e.get("feel") if e.get("feel") in ("zwaar", "goed", "makkelijk") else "goed"
+    try:
+        minutes = max(1, min(120, int(e.get("min") or 0)))
+    except (TypeError, ValueError):
+        minutes = 1
+    out = {"date": date, "type": e["type"], "len": e.get("len") if e.get("len") in ("kort", "middel", "lang") else "middel",
+           "min": minutes, "feel": feel, "at": str(e.get("at") or "")[:32]}
+    for k in ("fk", "fy"):  # fase kracht / yoga tijdens de sessie
+        if isinstance(e.get(k), int):
+            out[k] = e[k]
+    return out
 
 
 PUSHED_PATH = os.path.join(paths.DATA, "pushed.json")
@@ -430,21 +467,37 @@ def hr_pace_series(runs, ctx, floors, today, ref=145):
     """Tempo bij een vaste hartslag uit rustige, gelijkmatige duurlopen (aerobe vorm).
 
     Per run: gemiddeld tempo (met hellingcorrectie) en hartslag na de eerste 5 minuten, omgerekend naar
-    `ref` bpm via de hartslagreserve. Alleen runs dicht bij die hartslag: verder terugrekenen is onbetrouwbaar.
+    `ref` bpm. Omrekening via Daniels: zuurstofverbruik boven rust (VO2 - 3,5) schaalt met de hartslagreserve,
+    het tempo volgt uit de VO2-curve (dus minder dan evenredig met de hartslag). Alleen runs dicht bij die
+    hartslag: verder terugrekenen is onbetrouwbaar.
+
+    Vermoeid (telt niet mee in de trend): de dag na een zware training, of tot 3 dagen na een zeer zware
+    (Training Effect aeroob >= 4,5): daarna is de hartslag bij rustig tempo vaak nog verhoogd.
     """
     rest = ctx["rest_hr"]
     top = (floors[2] - 1) if floors and len(floors) > 2 else ref + 2  # bovengrens Z2
-    hard_days = {r["date"] for r in runs if (r.get("te_aerobic") or 0) >= 3.8 or (r.get("te_anaerobic") or 0) >= 2.0}
+    hard = {}  # datum -> (zwaarte, omschrijving) van de zwaarste training die dag
+    for r in runs:
+        te, ana = r.get("te_aerobic") or 0, r.get("te_anaerobic") or 0
+        lvl = 2 if te >= 4.5 else 1 if te >= 3.8 or ana >= 2.0 else 0
+        if lvl and lvl >= hard.get(r["date"], (0,))[0]:
+            hard[r["date"]] = (lvl, f"{r['name']} (TE {te:.1f})")
     cutoff = (today - dt.timedelta(weeks=26)).isoformat()
     pts = []
     for r in runs:
         hr, v = r.get("steady_hr"), r.get("steady_v")
         if r["date"] < cutoff or not (r.get("steady") and hr and v and r["minutes"] >= 20) or not ref - 15 <= hr <= top + 7:
             continue
-        prev = (dt.date.fromisoformat(r["date"]) - dt.timedelta(days=1)).isoformat()
+        day, tired = dt.date.fromisoformat(r["date"]), None
+        for n in (1, 2, 3):
+            h = hard.get((day - dt.timedelta(days=n)).isoformat())
+            if h and (n == 1 or h[0] == 2):
+                tired = f"{'De dag' if n == 1 else f'{n} dagen'} na {h[1]}"
+                break
+        vo2_ref = 3.5 + (M.vo2_at_speed(v * 60) - 3.5) * (ref - rest) / (hr - rest)
         pts.append({"id": r["id"], "date": r["date"], "name": r["name"], "km": r["km"], "hr": round(hr),
-                    "pace": round(1000 / v), "at_ref": round(1000 / (v * (ref - rest) / (hr - rest))),
-                    "tired": prev in hard_days})
+                    "pace": round(1000 / v), "at_ref": round(60000 / M.speed_for_vo2(vo2_ref)),
+                    "tired": tired})
     pts.sort(key=lambda x: x["date"])
     fresh = []
     for p in pts:  # lopende mediaan van de laatste 4 runs die niet na een zware dag vielen
@@ -854,6 +907,7 @@ def build_payload(period_weeks=12, km_override=None, hr_zones=None):
         "profile": paths.PROFILE, "period": period_weeks, "ctx": ctx,
         "goal": goal_out, "plan": plan, "overview": overview, "performance": perf, "training": training,
         "recovery": recovery, "technique": technique, "zones": zones, "activities": activities, "labels": M.RACE_LABELS,
+        "mobility": settings.get("mobility") or {"log": []},  # tabblad Kracht & yoga
         # Route: startpunt + afstand van de suggestie; de ORS-sleutel alleen lokaal (online zit hij versleuteld in cfg.enc)
         "route": {"home": settings.get("home"), "est_km": (suggestion or {}).get("est_km"),
                   "heat": M.heat_cells(runs, store.route_center()),
@@ -892,6 +946,15 @@ class Handler(BaseHTTPRequestHandler):
                 data = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        elif path == "/kracht.js":
+            with open(os.path.join(STATIC, "kracht.js"), "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
