@@ -324,6 +324,12 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 
 /* ---------- kracht & yoga ---------- */
 [data-view="kracht"]{grid-template-columns:minmax(0,1fr)}
+.ky-3d{width:100%;position:relative}
+.ky-3d-canvas{width:100%!important;height:auto!important;display:block;cursor:grab;touch-action:pan-y;border-radius:14px}
+.ky-3d-canvas:active{cursor:grabbing}
+.ky-3d-hint{position:absolute;right:8px;bottom:6px;font-size:11px;color:var(--faint);pointer-events:none}
+.ky-p-stage .ky-3d{max-width:620px}
+.ky-hero .ky-3d{max-width:520px;margin:0 auto}
 [data-view="kracht"]>*{min-width:0}
 [data-view="kracht"] .more{grid-template-columns:minmax(0,1fr)}
 .ky-p-intro>.btn:not(.ky-go){justify-self:start}

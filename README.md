@@ -33,7 +33,7 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 | `plan.py` | Trainingsplan: fase, weekomvang, indeling over je dagen, uitleg, volgende week, bijsturen bij gemiste trainingen |
 | `insights.py` | Inzichten in gewone taal |
 | `app.py` (`build_payload`) + `static/index.html` | Server en dashboard |
-| `static/kracht.js` | Tabblad Kracht & yoga: oefeningen met poppetje-animaties (SVG), sessies samenstellen, opbouw en speler |
+| `static/kracht.js` | Tabblad Kracht & yoga: oefeningen met animaties (2D-poppetje in lijsten, 3D-pop via three.js in speler en uitleg), sessies samenstellen, opbouw en speler |
 | `goal.json` | Je doel: `{"type": "event", "distance_km": 21.1, "time": "1:45:00", "date": "2027-03-14", "name": "..."}` (tijd, datum en naam optioneel; `type: "general"` zonder datum) |
 | `settings.json` | `run_days`/`long_days` (0 = maandag), `plan_start` (begin 4-weekse cyclus), `home`, `hr_zones`, `mobility.log` (gedane kracht/yoga-sessies) |
 
@@ -47,7 +47,9 @@ en voorspelt welke tijd je haalt op je doelafstand als je je huidige trend doorz
 ## Kracht & yoga
 Oefeningen zonder gewichten tegen stijfheid van fietsen en hardlopen. Kies per dag **yoga**, **kracht** of **beide** en de duur
 (kort ~10, middel ~20, lang ~30 min); het dashboard stelt de sessie samen (opwarmen → oefeningen → ontspannen) en begeleidt je
-met een bewegend poppetje (oranje = de spieren die werken of rekken), aftellen, herhalingen tellen, piepjes en "wissel van kant".
+met een bewegende 3D-pop (oranje = de spieren die werken of rekken; sleep om te draaien), aftellen, herhalingen tellen, piepjes en
+"wissel van kant". De 3D-pop gebruikt three.js (r128, cdnjs) en wordt pas geladen als je een oefening opent; zonder WebGL of
+internet blijft het 2D-poppetje staan. Elke krachtsessie bevat benen, heupen/billen, romp (buikspieren), bovenlijf (opdrukken) en kuiten.
 - **Opbouw** per onderdeel (kracht en yoga apart) op basis van het aantal gedane sessies, niet van kalenderweken:
   Kennismaken → Basis (6 punten) → Opbouwen (+8) → Sterker (+10) → Onderhoud (+10). Na elke sessie: *goed* = 1 punt,
   *te makkelijk* = 2, *te zwaar* = 0; twee keer achter elkaar te zwaar = een fase terug. Per fase andere varianten, rondes, herhalingen en tijden.

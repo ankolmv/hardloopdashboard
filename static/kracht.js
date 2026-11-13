@@ -115,13 +115,20 @@ const KY = (() => {
   const io = typeof IntersectionObserver === "function" ? new IntersectionObserver(es => es.forEach(e => { if (e.target._ky) e.target._ky.vis = e.isIntersecting; })) : null;
   function tick(now){
     for (const a of RUN){
-      if (!a.svg.isConnected){ RUN.delete(a); continue; }
-      if (!a.vis || a.paused || now - a.last < 33) continue;
+      if (!a.svg.isConnected){ RUN.delete(a); a.fig3 && a.fig3.dispose(); continue; }
+      if (!a.vis || now - a.last < (a.fig3 ? 16 : 33)) continue;
       a.last = now;
+      if (a.paused){ if (a.fig3) a.fig3.render(now); continue; }  // 3D: draaien met de muis blijft werken tijdens pauze
       const sec = (now - a.t0) / 1000 * a.speed, T = cycleLen(a.v), cyc = Math.floor(sec / T);
       if (cyc > a.cyc){ a.cyc = cyc; a.onCycle && a.onCycle(cyc); }
-      const {P, i} = frameAt(a.v, sec);
-      a.svg.innerHTML = figSVG(P, a.v, a.opt);
+      if (a.fig3){
+        const key = a.v.key ?? (a.v.frames.length > 1 ? 1 : 0), fr3 = a.v.frames3 ? {frames: a.v.frames3} : a.v;
+        const {P} = REDUCE ? {P: fr3.frames[key].p} : frameAt(fr3, sec);
+        a.fig3.setPose(P); a.fig3.render(now);
+      } else if (!REDUCE || a.v.frames.length < 2){
+        a.svg.innerHTML = figSVG(frameAt(a.v, sec).P, a.v, a.opt);
+      }
+      const {i} = frameAt(a.v, sec);
       if (a.lbl && a.lblI !== i){ a.lblI = i; a.lbl.textContent = a.v.frames[i].lbl || ""; }
     }
     raf = RUN.size ? requestAnimationFrame(tick) : 0;
@@ -139,8 +146,190 @@ const KY = (() => {
     return {
       pause(){ if (!a.paused){ a.paused = true; a.pAt = performance.now(); } },
       resume(){ if (a.paused){ a.paused = false; a.t0 += performance.now() - a.pAt; if (!raf) raf = requestAnimationFrame(tick); } },
-      stop(){ RUN.delete(a); },
+      stop(){ RUN.delete(a); a.fig3 && a.fig3.dispose(); },
+      // Overschakelen naar de 3D-pop (zelfde klok, dus herhalingen tellen gewoon door)
+      use3D(fig3, host){ a.fig3 = fig3; a.svg = host; RUN.add(a); if (!raf) raf = requestAnimationFrame(tick); },
     };
+  }
+
+  // ------------------------------------------------------------------ 3D-pop (three.js; alleen de grote animaties)
+  let threeP = null;
+  function loadThree(){
+    if (window.THREE) return Promise.resolve(window.THREE);
+    return threeP = threeP || new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+      s.onload = () => window.THREE ? res(window.THREE) : rej(new Error("three.js ontbreekt"));
+      s.onerror = () => { threeP = null; rej(new Error("three.js kon niet laden")); };
+      document.head.appendChild(s);
+    });
+  }
+  let glOk = null;
+  const hasGL = () => glOk ?? (glOk = (() => { try { const c = document.createElement("canvas"); return !!(c.getContext("webgl") || c.getContext("experimental-webgl")); } catch { return false; } })());
+  let az3 = 32;  // kijkhoek (graden), onthouden tussen oefeningen
+
+  function make3D(T, host, ex, v, opt = {}){
+    const S = 0.1, front = ex.view === "front";
+    const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const dark = (() => { const t = document.documentElement.dataset.theme; return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; })();
+    const col = c => new T.Color(c).convertSRGBToLinear();
+    const W = () => Math.max(200, host.clientWidth || 400), H = w => Math.round(w * .68);
+    const renderer = new T.WebGLRenderer({antialias: true, alpha: true});
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.setSize(W(), H(W()));
+    renderer.outputEncoding = T.sRGBEncoding;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+    const scene = new T.Scene(), cam = new T.PerspectiveCamera(30, W() / H(W()), .1, 300);
+    scene.add(new T.HemisphereLight(0xffffff, dark ? 0x30343c : 0x9aa0aa, dark ? .9 : .8));
+    const sun = new T.DirectionalLight(0xffffff, .75);
+    sun.position.set(-5, 16, 11); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, {left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 60});
+    sun.shadow.radius = 3; scene.add(sun); scene.add(sun.target);
+    const fill = new T.DirectionalLight(0xffffff, .25); fill.position.set(8, 6, -6); scene.add(fill);
+
+    const floor = new T.Mesh(new T.PlaneGeometry(80, 80), new T.ShadowMaterial({opacity: dark ? .35 : .16}));
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+    const grid = new T.Mesh(new T.CircleGeometry(11, 48), new T.MeshStandardMaterial({color: col(dark ? "#1f242c" : "#e9ecf1"), roughness: 1}));
+    grid.rotation.x = -Math.PI / 2; grid.position.y = -.01; grid.receiveShadow = true; scene.add(grid);
+
+    const mBody = new T.MeshStandardMaterial({color: col(dark ? "#c3cbd6" : "#c9d0da"), roughness: .55, metalness: .05});
+    const mDark = new T.MeshStandardMaterial({color: col(dark ? "#5b6472" : "#6b7482"), roughness: .6});
+    const accent = cssv("--accent") || "#fc4c02";
+    const mHl = new T.MeshStandardMaterial({color: col(accent), emissive: col(accent), emissiveIntensity: .25, roughness: .5});
+    const mProp = new T.MeshStandardMaterial({color: col(dark ? "#4b5360" : "#a9b1bc"), roughness: .8});
+    const mMat = new T.MeshStandardMaterial({color: col(cssv("--teal") || "#0d9488"), roughness: .9, transparent: true, opacity: .55});
+    const mWall = new T.MeshStandardMaterial({color: col(dark ? "#4b5360" : "#b8c0cb"), roughness: .9, transparent: true, opacity: .35, depthWrite: false});
+    const mStrap = new T.MeshStandardMaterial({color: col(cssv("--blue") || "#2563eb"), roughness: .6});
+
+    const fig = new T.Group(); scene.add(fig);
+    if (opt.mirror) fig.scale.x = -1;
+    const hl = new Set(v.hl || []);
+    const UP = new T.Vector3(0, 1, 0), tmp = new T.Vector3();
+    const geoms = [];
+    function limb(r1, r2, key, wide){
+      const g = new T.CylinderGeometry(r2, r1, 1, 16, 1); geoms.push(g);
+      const m = new T.Mesh(g, key && hl.has(key) ? mHl : mBody);
+      m.castShadow = true; m.userData.wide = wide || 1; fig.add(m); return m;
+    }
+    function ball(r, mat, sx = 1){
+      const g = new T.SphereGeometry(r, 18, 14); geoms.push(g);
+      const m = new T.Mesh(g, mat || mBody); m.castShadow = true; m.scale.set(front ? 1 : 1, 1, sx); fig.add(m); return m;
+    }
+    function place3(m, a, b){
+      tmp.subVectors(b, a); const len = Math.max(.001, tmp.length());
+      m.position.copy(a).addScaledVector(tmp, .5);
+      m.quaternion.setFromUnitVectors(UP, tmp.normalize());
+      const w = m.userData.wide;
+      m.scale.set(front ? w : 1, len, front ? 1 : w);
+    }
+    const P3 = {
+      torsoL: limb(.82, .86, "torso", 1.32), torsoU: limb(.86, .95, "torso", 1.4), neck: limb(.38, .34),
+      pelvis: ball(.88, hl.has("hip") ? mHl : mBody, front ? 1 : 1.3), chest: ball(.95, hl.has("torso") ? mHl : mBody, front ? 1 : 1.35),
+      head: ball(.85), nose: ball(.2, mDark),
+    };
+    const legs = {}, arms = {};
+    for (const k of ["la", "lb"]) legs[k] = {thigh: limb(.6, .45, k + "0"), knee: ball(.45, hl.has(k + "0") ? mHl : mBody), shin: limb(.45, .3, k + "1"), ankle: ball(.31), foot: limb(.3, .22), hipJ: ball(.6, hl.has(k + "0") ? mHl : mBody)};
+    for (const k of ["aa", "ab"]) arms[k] = {up: limb(.36, .3, k + "0"), elbow: ball(.3, hl.has(k + "0") ? mHl : mBody), fore: limb(.3, .24, k + "1"), hand: ball(.3), shJ: ball(.42, hl.has(k + "0") ? mHl : mBody)};
+    const strap = (v.props || []).some(p => p.k === "strap") ? (() => { const g = new T.CylinderGeometry(.08, .08, 1, 6); geoms.push(g); const m = new T.Mesh(g, mStrap); m.userData.wide = 1; fig.add(m); return m; })() : null;
+
+    // Hulpmiddelen
+    const X = x => (x - 100) * S, Y = y => (FLOOR - y) * S;
+    const box = (w, h, d, x, y, z, mat) => { const g = new T.BoxGeometry(w, h, d); geoms.push(g); const m = new T.Mesh(g, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; fig.add(m); return m; };  // in de figuurgroep: spiegelt mee
+    for (const p of v.props || []){
+      if (p.k === "mat" || p.k === "top") box(16.5, .08, 6, 0, .04, 0, mMat);
+      else if (p.k === "chair"){
+        const x0 = X(p.x), x1 = X(p.x + (p.w || 30)), y = Y(p.y), cx = (x0 + x1) / 2, w = x1 - x0;
+        box(w, .3, 3.6, cx, y - .15, 0, mProp);
+        for (const lx of [x0 + .2, x1 - .2]) for (const lz of [-1.6, 1.6]) box(.25, y - .3, .25, lx, (y - .3) / 2, lz, mProp);
+        box(.3, 3.4, 3.6, x0 - .1, y + 1.6, 0, mProp);
+      } else if (p.k === "wall"){ const w = box(.5, 12, 7, X(p.x + 3), 6, -1.5, mWall); w.castShadow = false; }
+      else if (p.k === "step") box(p.w * S, p.h * S, 4, X(p.x) + p.w * S / 2, p.h * S / 2, 0, mProp);
+    }
+
+    // Camera: alle standen van deze oefening passen in beeld
+    let minX = Infinity, maxX = -Infinity, maxY = 0;
+    for (const f of v.frames3 || v.frames){ const J = place(f.p); for (const q of [J.hip, J.sh, J.hc, ...J.la, ...J.lb, ...J.aa, ...J.ab]){ minX = Math.min(minX, X(q[0])); maxX = Math.max(maxX, X(q[0])); maxY = Math.max(maxY, Y(q[1])); } }
+    if (opt.mirror){ [minX, maxX] = [-maxX, -minX]; }
+    const cx = (minX + maxX) / 2, cy = Math.max(2.4, maxY / 2 + .4), spanX = maxX - minX + 5, spanY = maxY + 4;
+    function aim(){
+      const asp = cam.aspect, fov = cam.fov * Math.PI / 180, d = Math.max(spanY / 2 / Math.tan(fov / 2), spanX / 2 / Math.tan(fov / 2) / asp) * 1.08 + 3;
+      const a = az3 * Math.PI / 180, el = 13 * Math.PI / 180;
+      cam.position.set(cx + Math.sin(a) * d * Math.cos(el), cy + Math.sin(el) * d, Math.cos(a) * d * Math.cos(el));
+      cam.lookAt(cx, cy, 0);
+    }
+    aim();
+
+    // Draaien met muis of vinger
+    const cvs = renderer.domElement; cvs.className = "ky-3d-canvas";
+    let drag = null;
+    cvs.addEventListener("pointerdown", e => { drag = {x: e.clientX, a: az3}; cvs.setPointerCapture(e.pointerId); });
+    cvs.addEventListener("pointermove", e => { if (!drag) return; az3 = Math.max(-85, Math.min(85, drag.a + (e.clientX - drag.x) * .45)); aim(); });
+    const end = () => { drag = null; };
+    cvs.addEventListener("pointerup", end); cvs.addEventListener("pointercancel", end);
+    host.appendChild(cvs);
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => { const w = W(); renderer.setSize(w, H(w)); cam.aspect = w / H(w); cam.updateProjectionMatrix(); aim(); }) : null;
+    ro && ro.observe(host);
+
+    const V = (p, z = 0) => new T.Vector3(X(p[0]), Y(p[1]), z);
+    function setPose(P){
+      const J = place(P), zl = front ? .12 : .78, za = front ? .12 : 1.15;
+      const hip = V(J.hip), sh = V(J.sh), hc = V(J.hc);
+      const mid = V([.25 * J.hip[0] + .5 * J.ctrl[0] + .25 * J.sh[0], .25 * J.hip[1] + .5 * J.ctrl[1] + .25 * J.sh[1]]);  // midden van de (gebogen) rug
+      place3(P3.torsoL, hip, mid); place3(P3.torsoU, mid, sh);
+      if (P.br != null){ const b = 1 + .12 * P.br; P3.torsoL.scale.x *= b; P3.torsoL.scale.z *= b; }
+      P3.pelvis.position.copy(hip); P3.chest.position.copy(sh).lerp(mid, .25);
+      const nk = sh.clone().lerp(hc, .45); place3(P3.neck, sh, nk);
+      P3.head.position.copy(hc);
+      const hdir = hc.clone().sub(nk).normalize(), fwd = new T.Vector3(...(() => { const r = (P.t + (P.hd || 0) + 90) * Math.PI / 180; return [Math.sin(r), -Math.cos(r), 0]; })());
+      P3.nose.position.copy(hc).addScaledVector(hdir, .15).addScaledVector(fwd, -.78);
+      // Benen (eventueel gedraaid om de lengteas van de romp: liggende draai)
+      const axis = sh.clone().sub(hip).normalize(), tw = (P.lt || 0) * (opt.mirror ? -1 : 1) * Math.PI / 180;
+      for (const k of ["la", "lb"]){
+        const z = k === "la" ? zl : -zl, L = legs[k], j = J[k];
+        const hj = hip.clone().setZ(z);
+        const pts = j.map(q => { const p = V(q, z); if (tw){ p.sub(hip).applyAxisAngle(axis, tw).add(hip); } return p; });
+        L.hipJ.position.copy(hj); place3(L.thigh, hj, pts[0]); L.knee.position.copy(pts[0]); place3(L.shin, pts[0], pts[1]); L.ankle.position.copy(pts[1]); place3(L.foot, pts[1], pts[2]);
+      }
+      for (const k of ["aa", "ab"]){
+        const z = k === "aa" ? za : -za, A = arms[k], j = J[k];
+        const sj = sh.clone().setZ(z), e = V(j[0], z), h = V(j[1], z);
+        A.shJ.position.copy(sj); place3(A.up, sj, e); A.elbow.position.copy(e); place3(A.fore, e, h); A.hand.position.copy(h);
+      }
+      if (strap){
+        const a = arms.aa.hand.position.clone(), b = legs.la.foot.position.clone().add(new T.Vector3().subVectors(V(J.la[2], zl), V(J.la[1], zl)).multiplyScalar(.5));
+        place3(strap, a, b);
+      }
+    }
+    function render(now){
+      mHl.emissiveIntensity = .2 + .2 * (1 + Math.sin(now / 260)) / 2;
+      renderer.render(scene, cam);
+    }
+    function dispose(){
+      ro && ro.disconnect();
+      geoms.forEach(g => g.dispose());
+      [mBody, mDark, mHl, mProp, mMat, mStrap, mWall, floor.material, grid.material].forEach(m => m.dispose());
+      renderer.dispose(); try { renderer.forceContextLoss(); } catch {}
+      cvs.remove();
+    }
+    const key = v.key ?? (v.frames.length > 1 ? 1 : 0);
+    setPose((v.frames3 || v.frames)[REDUCE ? key : 0].p); render(performance.now());
+    return {setPose, render, dispose};
+  }
+
+  // Grote animatie: begint direct als 2D-poppetje en schakelt over naar 3D zodra three.js geladen is
+  function mountBig(host, ex, v, opt = {}){
+    host.classList.add("ky-3d");
+    host.innerHTML = `<svg class="ky-fig big" viewBox="${VB}" aria-hidden="true"></svg>`;
+    const ctl = animate(host.firstChild, v, opt);
+    if (hasGL()) loadThree().then(T => {
+      if (!host.isConnected || host.dataset.stopped) return;
+      let f3;
+      try { f3 = make3D(T, host, ex, v, opt); } catch (e){ console.warn("3D niet beschikbaar", e); return; }
+      host.querySelector("svg") && host.querySelector("svg").remove();
+      if (!host.querySelector(".ky-3d-hint")) host.insertAdjacentHTML("beforeend", `<span class="ky-3d-hint">↔ sleep om te draaien</span>`);
+      ctl.use3D(f3, host);
+    }).catch(() => {});
+    return {...ctl, stop(){ host.dataset.stopped = "1"; ctl.stop(); }};
   }
   function mountAll(root){
     root.querySelectorAll("svg[data-ky]").forEach(svg => {
@@ -168,6 +357,8 @@ const KY = (() => {
   const lungeDown = ST({ax: 95, t: 178, la: [85, 0, 90], lb: [-20, -100, 24]});
   const quad = QUAD({});
   const plankK = PRONE({anc: "ha", ax: 150, t: 96, hd: 0, la: [-62, -90, -90], lb: [-60, -90, -90], aa: [0, 90], ab: [2, 90]});
+  // Opdrukken (bovenste stand): gestrekte armen onder je schouders, lichaam recht
+  const PUSH = o => PRONE({anc: "ha", ax: 150, t: 108, hd: 0, la: [-72, -72, -15], lb: [-71, -71, -15], aa: [0, 0], ab: [2, 2], ...o});
   const plankF = PRONE({anc: "ha", ax: 150, t: 96, hd: 0, la: [-84, -84, -15], lb: [-83, -83, -15], aa: [0, 90], ab: [2, 90]});
 
   // ------------------------------------------------------------------ oefeningen
@@ -244,7 +435,7 @@ const KY = (() => {
         {name: "Plank met beentik", cue: "Til om de beurt een been een klein stukje op, zonder dat je heupen bewegen.", need: ["mat"], props: [MAT], hl: ["torso", "hip"],
           frames: [F(plankF, .8, .6, "Til een been een stukje op"), F({...plankF, la: [-75, -75, -15]}, .6, .6, "Terug"), F(plankF, .8, .6, "Ander been"), F({...plankF, lb: [-75, -75, -15]}, .6, .6, "Terug")]},
       ]},
-    sideplank: {kind: "kracht", group: "romp", name: "Zijplank", dose: "hold", side: true, from: 1,
+    sideplank: {kind: "kracht", group: "romp", name: "Zijplank", view: "front", dose: "hold", side: true, from: 1,
       why: "Traint de zijkant van je romp en heup. Die voorkomen dat je bekken bij elke pas wegzakt; dat scheelt klachten aan heup, knie en IT-band.",
       feel: [["Zijkant romp", "torso"], ["Zijkant heup", "hip"]],
       steps: [[0, "Lig op je zij, elleboog onder je schouder, benen op elkaar."], [1, "Duw je heup omhoog tot je lichaam een rechte lijn is."], [1, "Bovenste arm omhoog (of hand op je heup), adem rustig door."], [0, "Zak rustig terug en wissel van kant."]],
@@ -297,7 +488,7 @@ const KY = (() => {
           frames: [F(QUAD({aa: [100, 100], lb: [-82, -84, -80]}), .8, 1.2, "Strek uit"), F(QUAD({c: 6, hd: -30, aa: [-10, -60], lb: [60, -40, -60]}), .5, 1.2, "Elleboog naar knie"),
                    F(QUAD({ab: [100, 100], la: [-82, -84, -80]}), .8, 1.2, "Andere kant"), F(QUAD({c: 6, hd: -30, ab: [-10, -60], la: [60, -40, -60]}), .5, 1.2, "Elleboog naar knie")]},
       ]},
-    clam: {kind: "kracht", group: "heup", name: "Clamshell", dose: "reps", side: true,
+    clam: {kind: "kracht", group: "heup", name: "Clamshell", view: "front", dose: "reps", side: true,
       why: "Versterkt de kleine bilspier aan de zijkant van je heup. Die houdt je knie in lijn tijdens het landen en is bij veel fietsers en lopers juist zwak.",
       feel: [["Zijkant bil", "hip"]],
       steps: [[0, "Lig op je zij, knieën gebogen, voeten op elkaar, hoofd op je arm."], [1, "Houd je voeten tegen elkaar en til je bovenste knie op, als een schelp die opengaat."], [1, "Je bekken blijft stil: niet naar achteren kantelen."], [0, "Rustig terug."]],
@@ -335,6 +526,21 @@ const KY = (() => {
           frames: [F(ST({ax: 100, lb: [-6, -6, 90]}), .4, 2, "Scharnier naar voren, been naar achteren"), F(ST({ax: 100, t: 100, la: [8, 0, 90], lb: [-80, -80, -10], aa: [0, 0], ab: [0, 0]}), .5, 1.6, "Span je bil aan en kom omhoog")]},
         {name: "Deadlift op 1 been met pauze", cue: "2 tellen pauze onderin, armen naar voren.", hl: ["la0", "hip"],
           frames: [F(ST({ax: 100, lb: [-6, -6, 90]}), .4, 2, "Scharnier naar voren"), F(ST({ax: 100, t: 100, la: [8, 0, 90], lb: [-80, -80, -10], aa: [80, 80], ab: [82, 82]}), 2, 1.6, "Vasthouden… en omhoog")]},
+      ]},
+    pushup: {kind: "kracht", group: "bovenlijf", name: "Opdrukken", dose: "reps",
+      why: "Fietsen en hardlopen trainen je bovenlijf nauwelijks. Sterkere borst, schouders en armen geven een krachtigere armzwaai (bergop en in de eindsprint), helpen je bovenlijf stil te houden op de fiets en zijn goed voor je houding. Je romp werkt als een plank mee.",
+      feel: [["Borst", "torso"], ["Achterkant bovenarmen", "aa0"], ["Schouders", "aa1"]],
+      steps: [[0, "Handen iets breder dan je schouders op de grond, vingers naar voren."], [0, "Span je buik en billen aan: je lichaam is één rechte lijn."], [1, "Zak in 2 tellen tot je borst bijna de grond raakt. Ellebogen schuin naar achteren, niet wijd opzij."], [0, "Duw jezelf krachtig weer omhoog en adem daarbij uit."]],
+      mistakes: [{txt: "Heupen zakken door", good: PUSH({}), bad: PUSH({t: 122, la: [-86, -86, -20], lb: [-85, -85, -20]}), fix: "Span je buik en billen aan; liever minder diep dan met een holle rug."},
+                 {txt: "Ellebogen wijd opzij", good: null, bad: null, fix: "Houd je ellebogen in een hoek van ongeveer 45 graden naast je lichaam: dat spaart je schouders."}],
+      v: [
+        {name: "Opdrukken op je knieën", cue: "Knieën op de grond, rechte lijn van hoofd tot knieën.", need: ["mat"], props: [MAT], hl: ["aa0", "aa1", "torso"],
+          frames: [F(PUSH({t: 122, la: [-58, -90, -90], lb: [-57, -90, -90]}), .4, 2, "Zak in 2 tellen naar beneden"),
+                   F(PUSH({t: 100, la: [-80, -90, -90], lb: [-79, -90, -90], aa: [-105, 25], ab: [-103, 25]}), .3, 1.2, "Duw jezelf omhoog, adem uit")]},
+        {name: "Opdrukken", cue: "Op je tenen, lichaam als een plank, borst bijna tot de grond.", need: ["mat"], props: [MAT], hl: ["aa0", "aa1", "torso"],
+          frames: [F(PUSH({}), .4, 2, "Zak in 2 tellen naar beneden"), F(PUSH({t: 92, la: [-88, -88, -15], lb: [-87, -87, -15], aa: [-105, 25], ab: [-103, 25]}), .3, 1.2, "Duw jezelf omhoog, adem uit")]},
+        {name: "Opdrukken langzaam", cue: "3 tellen omlaag, 1 tel stil net boven de grond, krachtig omhoog.", need: ["mat"], props: [MAT], hl: ["aa0", "aa1", "torso"],
+          frames: [F(PUSH({}), .4, 3, "Zak in 3 tellen naar beneden"), F(PUSH({t: 92, la: [-88, -88, -15], lb: [-87, -87, -15], aa: [-105, 25], ab: [-103, 25]}), 1, 1.2, "Even stil… en krachtig omhoog")]},
       ]},
 
     // ---------------------------------------------------------------- yoga & mobiliteit
@@ -454,9 +660,11 @@ const KY = (() => {
       steps: [[0, "Lig op je rug, knieën gebogen, armen wijd (een T)."], [1, "Laat beide knieën rustig naar één kant zakken."], [1, "Je schouders blijven op de grond; kijk eventueel de andere kant op."], [0, "Kom terug naar het midden en wissel van kant."]],
       mistakes: [{txt: "Schouder komt van de grond", good: null, bad: null, fix: "Laat je knieën minder ver zakken of leg er een kussen onder."}],
       v: [{name: "Liggende draai", cue: "Knieën naar één kant, schouders blijven liggen.", need: ["mat"], props: [{k: "top"}], hl: ["torso"],
+        frames3: [F(SUP({anc: "hip", ax: 100, la: [140, 30, 90], lb: [138, 28, 90], aa: [-100, -95], ab: [-98, -95]}), 1, 2.5),
+                  F(SUP({anc: "hip", ax: 100, la: [140, 30, 90], lb: [138, 28, 90], aa: [-100, -95], ab: [-98, -95], lt: 62}), 4, 2.5)],
         frames: [F({anc: "hip", ax: 100, ay: 56, t: 180, la: [0, 0, 0], lb: [0, 0, 0], aa: [90, 92], ab: [-90, -92]}, 1, 2.5, "Laat je knieën naar één kant zakken"),
                  F({anc: "hip", ax: 100, ay: 56, t: 178, la: [58, -5, -5], lb: [52, -12, -12], aa: [90, 92], ab: [-90, -92]}, 4, 2.5, "Adem rustig, schouders blijven liggen")]}]},
-    vlinder: {kind: "yoga", name: "Vlinder", dose: "hold",
+    vlinder: {kind: "yoga", name: "Vlinder", view: "front", dose: "hold",
       why: "Rekt de binnenkant van je bovenbenen en liezen, die door fietsen en hardlopen weinig in de breedte bewegen.",
       feel: [["Binnenkant bovenbenen", "la0"]],
       steps: [[0, "Ga rechtop zitten, voetzolen tegen elkaar, knieën naar buiten."], [0, "Pak je voeten vast en maak je rug lang."], [1, "Laat je knieën rustig zakken; niet duwen."], [1, "Wil je meer? Buig met een lange rug iets voorover."]],
@@ -532,8 +740,8 @@ const KY = (() => {
     return it.side ? one * 2 + SWITCH : one;
   };
 
-  const KGROUPS = {benen: ["squat", "lunge", "stepup", "sldl"], heup: ["bridge", "clam"], romp: ["plank", "deadbug", "birddog", "sideplank"], kuit: ["calf"]};
-  const KSLOTS = ["benen", "heup", "romp", "kuit", "benen", "romp", "heup", "romp"];
+  const KGROUPS = {benen: ["squat", "lunge", "stepup", "sldl"], heup: ["bridge", "clam"], romp: ["plank", "deadbug", "birddog", "sideplank"], kuit: ["calf"], bovenlijf: ["pushup"]};
+  const KSLOTS = ["benen", "heup", "romp", "bovenlijf", "kuit", "benen", "romp", "heup", "romp"];
   const YCORE = ["uitval", "hamstring", "fig4", "kuitrek"], YREST = ["hond", "voorover", "sfinx", "vlinder", "draai", "kind"];
   const YFLOW = ["voorover", "kuitrek", "hond", "uitval", "kind", "sfinx", "vlinder", "fig4", "hamstring", "draai"];
   const LEN = {kort: 10, middel: 20, lang: 30};
@@ -737,7 +945,7 @@ const KY = (() => {
     $("#dSub").textContent = `${ex.kind === "kracht" ? "Kracht" : "Yoga en mobiliteit"}${(v.side ?? ex.side) ? " · per kant" : ex.alt ? " · links en rechts om de beurt" : ""}`;
     const feelFig = {...v, hl: ex.feel.map(f => f[1]), props: v.props};
     $("#dBody").innerHTML = `
-      <div class="card ky-hero"><svg class="ky-fig big" viewBox="${VB}" id="kyDrawFig"></svg><div class="ky-cue" id="kyDrawLbl"></div>
+      <div class="card ky-hero"><div id="kyDrawFig"></div><div class="ky-cue" id="kyDrawLbl"></div>
         <p style="margin:6px 0 0"><b>${esc(v.name)}</b>${(v.need || []).length ? ` · <span class="muted">nodig: ${v.need.join(", ")}</span>` : ""}</p><p class="cap" style="margin:2px 0 0">${esc(v.cue)}</p></div>
       <div class="card"><h3>Waarom?</h3><p style="margin:0">${esc(ex.why)}</p></div>
       <div class="card"><h3>Zo doe je het</h3><div class="ky-steps">${ex.steps.map(([fi, t], i) => `<div class="ky-step">${exThumb(id, ex.v.indexOf(v), "", Math.min(fi, v.frames.length - 1))}<div><span class="ky-num">${i + 1}</span>${esc(t)}</div></div>`).join("")}</div></div>
@@ -750,7 +958,7 @@ const KY = (() => {
       ${ex.v.length > 1 ? `<div class="card"><h3>Te zwaar? Te makkelijk?</h3><p class="cap">Elke oefening heeft een makkelijkere en een zwaardere variant. De opbouw kiest automatisch; je mag altijd terug naar een makkelijkere.</p>
         <div class="ky-vars">${ex.v.map((x, i) => `<button class="ky-var${i === cur ? " cur" : ""}" data-vi="${i}">${exThumb(id, i)}<b>${["Makkelijker", "Standaard", "Zwaarder"][i] || ""}</b><span>${esc(x.name)}</span>${i === cur ? '<span class="badge">jouw fase</span>' : ""}</button>`).join("")}</div></div>` : ""}`;
     $("#drawer").classList.add("on"); $("#drawerBg").classList.add("on"); $("#drawer").scrollTop = 0;
-    animate($("#kyDrawFig"), v, {lbl: $("#kyDrawLbl")});
+    mountBig($("#kyDrawFig"), ex, v, {lbl: $("#kyDrawLbl")});
     mountAll($("#dBody"));
     $("#dBody").querySelectorAll(".ky-var").forEach(b => b.onclick = () => openEx(id, +b.dataset.vi));
   }
@@ -810,13 +1018,13 @@ const KY = (() => {
       } else {
         const v = s.v, it = s.it;
         el.innerHTML = `${prog}<div class="ky-p-top"><div><b>${esc(v.name)}</b><div class="muted">${esc(s.block.title)}${s.rounds > 1 ? ` · ronde ${s.round} van ${s.rounds}` : ""}${s.side ? ` · ${s.side === "links" ? "eerste kant" : "tweede kant"}` : ""} · oefening ${done + 1} van ${total}</div></div><button class="btn icon" id="kyX">✕</button></div>
-          <div class="ky-p-main"><div class="ky-p-stage"><svg class="ky-fig big" viewBox="${VB}" id="kyFig"></svg><div class="ky-cue" id="kyLbl"></div></div>
+          <div class="ky-p-main"><div class="ky-p-stage"><div id="kyFig"></div><div class="ky-cue" id="kyLbl"></div></div>
           <div class="ky-p-info">
             <div class="ky-count">${it.reps ? `<div class="ky-reps"><span id="kyR">0</span><small>/ ${it.reps}${it.alt ? " per kant" : ""}</small></div>` : `<div class="ky-ring">${ring(1)}<div class="ky-ring-t" id="kyT">${it.secs}</div></div>`}</div>
             <p class="ky-one">${esc(v.cue)}</p>
             <details class="ky-more"><summary>Meer uitleg</summary><ol>${s.ex.steps.map(x => `<li>${esc(x[1])}</li>`).join("")}</ol><p class="cap"><b>Let op:</b> ${s.ex.mistakes.map(m => `${esc(m.txt)} → ${esc(m.fix)}`).join(" ")}</p></details>
             <div class="ky-ctrl"><button class="btn" id="kyPrev">⏮</button><button class="btn" id="kyPause">⏸ Pauze</button><button class="btn primary" id="kyNext">${it.reps ? "Klaar ✓" : "Volgende ⏭"}</button></div></div></div>`;
-        anim = animate(el.querySelector("#kyFig"), v, {lbl: el.querySelector("#kyLbl"), mirror: s.mirror, speed: fast,
+        anim = mountBig(el.querySelector("#kyFig"), s.ex, v, {lbl: el.querySelector("#kyLbl"), mirror: s.mirror, speed: fast,
           onCycle: it.reps ? c => { reps = c; const r = el.querySelector("#kyR"); if (r) r.textContent = Math.min(c, it.reps); if (c === it.reps){ beep(990); setTimeout(() => { if (ST_[i] === s && !paused) go(i + 1); }, 1500); } else beep(520, 60); } : null});
         if (!it.reps) tickDown(it.secs);
       }
@@ -881,6 +1089,6 @@ const KY = (() => {
     intro();
   }
 
-  return {render, EX, figSVG, svgWrap, place, buildSession, track, steps, VB, animate};
+  return {render, EX, figSVG, svgWrap, place, buildSession, track, steps, VB, animate, mountBig};
 })();
 function renderKracht(){ KY.render(); }
