@@ -718,6 +718,8 @@ const KY = (() => {
     }
     return {phase, cred, need: TH[phase] ?? 0, n, prog: phase < 4 ? cred / TH[phase] : 0, ups};
   }
+  // Dezelfde opbouw, maar alsof je net in fase p bent beland (voor de vooruitblik per fase)
+  const atPhase = (tr, p) => ({...tr, phase: p, cred: 0, prog: 0, need: TH[p] ?? 0});
   const variantFor = (ex, tr) => {
     const p = tr.phase, i = p <= 1 ? 0 : p === 2 ? 1 : p === 3 ? 2 : 1 + (tr.n % 2);
     return Math.min(i, ex.v.length - 1);
@@ -789,8 +791,11 @@ const KY = (() => {
   const fixed = (id, tr) => ({id, ...dose(EX[id], tr, "yoga")});
   const blockSecs = b => b.rounds * b.items.reduce((s, it) => s + itemSecs(it) + b.rest, 0) - b.rest + (b.rounds - 1) * ((b.roundRest || b.rest) - b.rest);
 
-  function buildSession(type, len, log){
-    const tk = track(log, "kracht"), ty = track(log, "yoga"), T = LEN[len] * 60, blocks = [];
+  function buildSession(type, len, log, ov = {}){
+    let tk = track(log, "kracht"), ty = track(log, "yoga");
+    if (ov.kracht != null) tk = atPhase(tk, ov.kracht);
+    if (ov.yoga != null) ty = atPhase(ty, ov.yoga);
+    const T = LEN[len] * 60, blocks = [];
     const warm = {kind: "warm", title: "Opwarmen", items: [fixed("katkoe", ty)], rounds: 1, rest: 10};
     const calm = {kind: "calm", title: "Ontspannen", items: [fixed("adem", ty)], rounds: 1, rest: 0};
     if (type === "kracht"){
@@ -874,6 +879,7 @@ const KY = (() => {
   const TCOL = {kracht: "var(--accent)", yoga: "var(--teal)", beide: "var(--purple)"};
   const FEEL = {zwaar: "Te zwaar", goed: "Goed", makkelijk: "Te makkelijk"};
   let libKind = "alle";
+  const peek = {};  // per soort de fase die je in "Jouw opbouw" bekijkt (standaard de volgende)
   const sel = () => ({type: store.get("ky_type", "yoga"), len: store.get("ky_len", "kort")});
   const exThumb = (id, vi, cls = "", fi = null, mirror = false) => `<svg class="ky-fig ${cls}" viewBox="${VB}" data-ky="${id}:${vi}${fi != null ? ":" + fi : ""}"${mirror ? ' data-mirror="1"' : ""} aria-hidden="true"></svg>`;
   const doseTxt = it => it.reps ? `${it.reps}×${it.alt || it.side ? " per kant" : ""}` : `${it.secs} s${it.side ? " per kant" : ""}`;
@@ -903,12 +909,43 @@ const KY = (() => {
         <button class="btn primary ky-go" id="kyGo">${svgI('<path d="M7 4l13 8-13 8z"/>')}Start ${TYPES[type].n.toLowerCase()}</button></div>`;
 
     // --- opbouw
+    const span = a => a[0] === a[1] ? `${a[0]}` : `${a[0]}–${a[1]}`;
+    const vset = (ex, t) => [...new Set([variantFor(ex, t), variantFor(ex, {...t, n: t.n + 1})])];
+    const vnames = (ex, vs) => vs.map(i => ex.v[i].name).join(" / ");
+    const peekHTML = (kind, tr, kindKey) => {
+      const a = tr.phase, p = peek[kind] ?? Math.min(4, a + 1);
+      if (p === a) return "";
+      const rows = [], ch = (lbl, x, y) => { if (x !== y) rows.push(`<li>${lbl}: <s>${x}</s> → <b>${y}</b></li>`); };
+      if (kind === "kracht"){
+        ch("Rondes", K.rounds[a], K.rounds[p]); ch("Herhalingen", span(K.reps[a]), span(K.reps[p]));
+        ch("Vasthouden (plank e.d.)", `${K.hold[a]} s`, `${K.hold[p]} s`); ch("Rust tussen oefeningen", `${K.rest[a]} s`, `${K.rest[p]} s`);
+      } else ch("Houdingen vasthouden", `${Y.hold[a]} s`, `${Y.hold[p]} s`);
+      const A = atPhase(tr, a), B = atPhase(tr, p), cards = [];
+      for (const [id, ex] of Object.entries(EX)){
+        if (ex.kind !== kind || (ex.from || 0) > p || ex.v.length < 2 && (ex.from || 0) <= a) continue;
+        const va = vset(ex, A), vb = vset(ex, B), isNew = (ex.from || 0) > a, gone = (ex.from || 0) > p;
+        if (gone || (!isNew && va.join() === vb.join())) continue;
+        cards.push(`<button class="ky-item" data-ex="${id}" data-vi="${vb[0]}">${exThumb(id, vb[0])}<span><b>${esc(ex.name)}</b>
+          <span class="muted">${isNew ? `Nieuw: ${esc(vnames(ex, vb))}` : `${esc(vnames(ex, va))} → <b>${esc(vnames(ex, vb))}</b>`}</span></span></button>`);
+      }
+      const S = buildSession(kind, sel().len, log, {[kind]: p}), main = S.blocks.find(b => b.kind === kind);
+      return `<div class="ky-peek" style="--c:${TCOL[kind]}">
+        <div class="ky-peek-h"><b>${p > a ? "Straks" : "Eerder"} in fase ${p + 1}: ${PHASES[p].n}</b>${p > a ? `<span class="muted">${p === a + 1 ? `nog ${tr.need - tr.cred} punt${tr.need - tr.cred === 1 ? "" : "en"}` : `nog ${TH.slice(a, p).reduce((s, x) => s + x, 0) - tr.cred} punten`}</span>` : ""}</div>
+        <p class="ky-phtxt">${PHASES[p][kindKey]}</p>
+        ${rows.length ? `<ul class="ky-chg">${rows.join("")}</ul>` : ""}
+        ${cards.length ? `<div class="ky-sub">Oefeningen die veranderen</div><div class="ky-items">${cards.join("")}</div>` : `<p class="cap">De oefeningen zelf blijven hetzelfde.</p>`}
+        ${main ? `<div class="ky-sub">Zo ziet een ${kind === "kracht" ? "krachtsessie" : "yogasessie"} van ~${LEN[sel().len]} min er dan uit${main.rounds > 1 ? ` · ${main.rounds} rondes` : ""}</div>
+          <div class="ky-items">${main.items.map(it => `<button class="ky-item" data-ex="${it.id}" data-vi="${it.vi}">${exThumb(it.id, it.vi)}<span><b>${esc(EX[it.id].v[it.vi].name)}</b><span class="muted">${doseTxt(it)}</span></span></button>`).join("")}</div>` : ""}
+      </div>`;
+    };
     const trackHTML = (name, tr, col, kindKey) => `<div class="ky-track"><div class="row between"><b>${name}</b><span class="muted">${tr.n} sessie${tr.n === 1 ? "" : "s"}</span></div>
-      <div class="ky-phases">${PHASES.map((p, i) => `<div class="ky-ph${i < tr.phase ? " done" : i === tr.phase ? " on" : ""}" style="--c:${col}"><span class="ky-ph-dot">${i < tr.phase ? "✓" : i + 1}</span><span class="ky-ph-n">${p.n}</span></div>`).join("")}</div>
+      <div class="ky-phases">${PHASES.map((p, i) => { const pk = peek[kindKey === "k" ? "kracht" : "yoga"] ?? Math.min(4, tr.phase + 1);
+        return `<button class="ky-ph${i < tr.phase ? " done" : i === tr.phase ? " on" : ""}${i === pk && i !== tr.phase ? " peek" : ""}" data-peek="${kindKey === "k" ? "kracht" : "yoga"}:${i}" style="--c:${col}" title="Bekijk wat er in deze fase verandert"><span class="ky-ph-dot">${i < tr.phase ? "✓" : i + 1}</span><span class="ky-ph-n">${p.n}</span></button>`; }).join("")}</div>
       ${tr.phase < 4 ? `<div class="ky-bar"><span style="width:${Math.round(tr.prog * 100)}%;background:${col}"></span></div>
         <p class="cap">Nog ${tr.need - tr.cred} punt${tr.need - tr.cred === 1 ? "" : "en"} tot <b>${PHASES[tr.phase + 1].n}</b>. Een sessie die goed ging telt 1, te makkelijk telt 2, te zwaar telt niet.</p>`
         : `<p class="cap">Je zit in de onderhoudsfase: goed bezig!</p>`}
-      <p class="ky-phtxt"><b>Nu:</b> ${PHASES[tr.phase][kindKey]}</p></div>`;
+      <p class="ky-phtxt"><b>Nu:</b> ${PHASES[tr.phase][kindKey]}</p>
+      ${peekHTML(kindKey === "k" ? "kracht" : "yoga", tr, kindKey)}</div>`;
     const days = [], d0 = new Date(); d0.setHours(12); const dow = (d0.getDay() + 6) % 7;
     const start = new Date(d0); start.setDate(d0.getDate() - dow - 7 * 7);
     const byDate = {}; log.forEach(e => (byDate[e.date] = byDate[e.date] || []).push(e));
@@ -932,6 +969,7 @@ const KY = (() => {
     root.querySelectorAll(".ky-type").forEach(b => b.onclick = () => { store.set("ky_type", b.dataset.type); render(); });
     root.querySelectorAll("#kyLen button").forEach(b => b.onclick = () => { store.set("ky_len", b.dataset.len); render(); });
     root.querySelectorAll("#kyLibSeg button").forEach(b => b.onclick = () => { libKind = b.dataset.k; render(); });
+    root.querySelectorAll("[data-peek]").forEach(b => b.onclick = () => { const [k, i] = b.dataset.peek.split(":"); peek[k] = +i; render(); });
     root.querySelectorAll("[data-ex]").forEach(b => b.onclick = () => openEx(b.dataset.ex, +b.dataset.vi));
     root.querySelectorAll(".ky-undo").forEach(b => b.onclick = () => { const e = log.find(x => x.at === b.dataset.at); if (e && confirm("Deze sessie weghalen uit je logboek?")) removeEntry(e); });
     $("#kyGo").onclick = () => play(buildSession(type, len, fullLog()));
