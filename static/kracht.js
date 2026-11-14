@@ -804,7 +804,9 @@ const KY = (() => {
     return it.side ? one * 2 + SWITCH : one;
   };
 
-  const KGROUPS = {benen: ["squat", "lunge", "stepup", "sldl"], heup: ["bridge", "clam"], romp: ["plank", "deadbug", "birddog", "sideplank"], kuit: ["calf"], bovenlijf: ["pushup"]};
+  // Step-up staat er bewust niet in: geen verhoging in huis; lunge/split squat en deadlift op 1 been dekken hetzelfde af
+  const KGROUPS = {benen: ["squat", "lunge", "sldl"], heup: ["bridge", "clam"], romp: ["plank", "deadbug", "birddog", "sideplank"], kuit: ["calf"], bovenlijf: ["pushup"]};
+  const inUse = id => EX[id].kind !== "kracht" || Object.values(KGROUPS).some(g => g.includes(id));
   const KSLOTS = ["benen", "heup", "romp", "bovenlijf", "kuit", "benen", "romp", "heup", "romp"];
   const YCORE = ["uitval", "hamstring", "fig4", "kuitrek"], YREST = ["hond", "voorover", "sfinx", "vlinder", "draai", "kind"];
   const YFLOW = ["voorover", "kuitrek", "hond", "uitval", "kind", "sfinx", "vlinder", "fig4", "hamstring", "draai"];
@@ -984,7 +986,7 @@ const KY = (() => {
       } else ch("Houdingen vasthouden", `${Y.hold[a]} s`, `${Y.hold[p]} s`);
       const A = atPhase(tr, a), B = atPhase(tr, p), cards = [];
       for (const [id, ex] of Object.entries(EX)){
-        if (ex.kind !== kind || (ex.from || 0) > p || ex.v.length < 2 && (ex.from || 0) <= a) continue;
+        if (ex.kind !== kind || !inUse(id) || (ex.from || 0) > p || ex.v.length < 2 && (ex.from || 0) <= a) continue;
         const va = vset(ex, A), vb = vset(ex, B), isNew = (ex.from || 0) > a, gone = (ex.from || 0) > p;
         if (gone || (!isNew && va.join() === vb.join())) continue;
         cards.push(`<button class="ky-item" data-ex="${id}" data-vi="${vb[0]}">${exThumb(id, vb[0])}<span><b>${esc(ex.name)}</b>
@@ -1021,7 +1023,7 @@ const KY = (() => {
       <div class="ky-legend">${Object.entries(TYPES).map(([k, t]) => `<span><i style="background:${TCOL[k]}"></i>${t.n}</span>`).join("")}</div>`;
 
     // --- bibliotheek
-    const lib = Object.values(EX).filter(e => libKind === "alle" || e.kind === libKind);
+    const lib = Object.values(EX).filter(e => inUse(e.id) && (libKind === "alle" || e.kind === libKind));
     $("#kyLib").innerHTML = `<div class="row between"><div><h3>Oefeningen</h3><p class="cap">Klik op een oefening voor de uitleg: waarom, hoe, wat je voelt, veelgemaakte fouten en een makkelijkere of zwaardere variant.</p></div>
       <div class="seg" id="kyLibSeg">${[["alle", "Alles"], ["kracht", "Kracht"], ["yoga", "Yoga"]].map(([k, n]) => `<button data-k="${k}" class="${k === libKind ? "on" : ""}">${n}</button>`).join("")}</div></div>
       <div class="ky-lib">${lib.map(e => { const vi = variantFor(e, e.kind === "kracht" ? tk : ty); return `<button class="ky-card" data-ex="${e.id}" data-vi="${vi}">${exThumb(e.id, vi)}
