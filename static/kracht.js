@@ -688,6 +688,68 @@ const KY = (() => {
   };
   for (const [id, e] of Object.entries(EX)) e.id = id;
 
+  // Stappen per variant: de stappen bij de oefening horen bij de standaardvariant; hier de makkelijkere (0) en zwaardere (2)
+  const VSTEPS = {
+    squat: {
+      0: [[0, "Zet een stoel achter je en ga ervoor staan, voeten op heupbreedte."], [1, "Duw je billen naar achteren en zak rustig richting de stoel. Je borst blijft naar voren."], [1, "Tik de stoel even aan met je billen; niet gaan zitten."], [0, "Duw door je hele voet (vooral de hielen) weer omhoog."]],
+      2: [[0, "Sta met je voeten op heupbreedte, tenen licht naar buiten."], [1, "Zak in 2–3 tellen tot je bovenbenen ongeveer horizontaal zijn."], [1, "Houd onderin 3 tellen stil. Knieën blijven in de richting van je tenen."], [0, "Kom krachtig omhoog door je hele voet."]]},
+    bridge: {
+      0: [[0, "Lig op je rug, knieën gebogen, voeten plat op heupbreedte, armen naast je lichaam."], [0, "Kantel je bekken zodat je onderrug zacht op de grond drukt."], [1, "Knijp je billen samen en til je heupen een klein stukje op."], [0, "Rol rustig terug naar beneden."]],
+      2: [[0, "Lig op je rug, knieën gebogen. Strek één been naar het plafond of in het verlengde van je bovenbeen."], [0, "Druk de hiel van je standbeen in de grond en span je bil aan."], [1, "Duw je heupen omhoog met één been tot een rechte lijn. Je heupen blijven recht, niet kantelen."], [0, "Rol rustig terug en wissel na je herhalingen van been."]]},
+    lunge: {
+      0: [[0, "Ga zijwaarts naast een muur staan en leg je hand ertegen."], [1, "Zet het been aan de buitenkant een stap naar achteren en zak rustig recht naar beneden."], [1, "Zak maar zo ver als prettig is; je voorste knie blijft boven je enkel."], [0, "Duw met je voorste been terug naar de beginhouding."]],
+      2: [[0, "Zet je voeten in een spreidstand: één voet een grote pas voor de andere. Achterste hak van de grond."], [1, "Zak recht naar beneden tot je achterste knie bijna de grond raakt."], [1, "Je voeten blijven staan; je bovenlijf blijft rechtop."], [0, "Duw jezelf met je voorste been weer omhoog en blijf in de spreidstand voor de volgende herhaling."]]},
+    stepup: {
+      0: [[0, "Zet één voet helemaal op een lage trede (ongeveer 15 cm)."], [1, "Duw jezelf rustig omhoog met het been op de trede."], [1, "Sta even rechtop; houd je ergens aan vast als dat nodig is."], [0, "Zet je voet rustig en gecontroleerd terug op de grond."]],
+      2: [[0, "Zet één voet helemaal op een traptrede of stevig krukje."], [1, "Duw jezelf omhoog met het been op de trede."], [1, "Trek bovenaan je andere knie op tot heuphoogte en blijf even in balans."], [0, "Zet je voet rustig en gecontroleerd terug op de grond."]]},
+    plank: {
+      0: [[0, "Lig op je buik, ellebogen onder je schouders, onderarmen op de grond."], [0, "Je knieën blijven op de grond. Span je buik en billen aan en til je bovenlijf en heupen op."], [0, "Je lichaam is een rechte lijn van hoofd tot knieën."], [0, "Adem rustig door. Kijk naar de grond tussen je handen."]],
+      2: [[0, "Ga in de plank op je onderarmen en tenen, lichaam als een rechte plank."], [0, "Span je buik en billen stevig aan."], [0, "Til om de beurt een been een klein stukje op en zet het weer neer."], [0, "Je heupen blijven stil: niet draaien of zakken. Adem rustig door."]]},
+    sideplank: {
+      0: [[0, "Lig op je zij, elleboog onder je schouder, knieën gebogen (voeten naar achteren)."], [1, "Duw je heup omhoog: rechte lijn van hoofd tot knieën. Je knie blijft op de grond."], [1, "Bovenste hand op je heup, adem rustig door."], [0, "Zak rustig terug en wissel van kant."]],
+      2: [[0, "Lig op je zij, elleboog onder je schouder, benen gestrekt op elkaar."], [1, "Duw je heup omhoog tot je lichaam een rechte lijn is."], [1, "Laat je heup rustig een stukje zakken en duw hem weer omhoog."], [0, "Herhaal rustig, zak daarna terug en wissel van kant."]]},
+    deadbug: {
+      0: [[0, "Lig op je rug, armen recht naar het plafond, knieën boven je heupen (90 graden)."], [0, "Druk je onderrug zacht tegen de grond. Dat blijft zo de hele oefening."], [1, "Laat één voet zakken en tik met je hiel de grond aan. Je armen blijven omhoog."], [0, "Terug naar het midden en wissel van been."]],
+      2: [[0, "Lig op je rug, armen recht naar het plafond, knieën boven je heupen (90 graden)."], [0, "Druk je onderrug zacht tegen de grond. Dat blijft zo de hele oefening."], [1, "Strek in 3 tellen één been en de tegenovergestelde arm uit, net boven de grond. Houd 1 tel vast."], [0, "In 3 tellen terug naar het midden en wissel van kant."]]},
+    birddog: {
+      0: [[0, "Op handen en knieën: handen onder je schouders, knieën onder je heupen."], [1, "Je handen blijven op de grond. Strek één been naar achteren."], [1, "Je rug blijft vlak als een tafel; je heupen blijven recht."], [0, "Terug en wissel van been."]],
+      2: [[0, "Op handen en knieën: handen onder je schouders, knieën onder je heupen."], [1, "Strek één arm naar voren en het andere been naar achteren."], [1, "Breng daarna elleboog en knie onder je buik naar elkaar toe en strek weer uit."], [0, "Doe je herhalingen en wissel van kant."]]},
+    clam: {
+      0: [[0, "Lig op je zij, knieën gebogen, voeten op elkaar, hoofd op je arm."], [1, "Houd je voeten tegen elkaar en til je bovenste knie een klein stukje op."], [1, "Je bekken blijft stil: niet naar achteren kantelen."], [0, "Rustig terug."]],
+      2: [[0, "Lig op je zij met gestrekte benen op elkaar, hoofd op je arm."], [1, "Til je bovenste been gestrekt op. Tenen wijzen naar voren, niet naar het plafond."], [1, "Je bekken blijft stil; je been gaat iets naar achteren, niet naar voren."], [0, "Laat je been rustig zakken."]]},
+    calf: {
+      0: [[0, "Sta rechtop met een hand tegen de muur, voeten op heupbreedte."], [1, "Kom rustig omhoog op je tenen, zo hoog als je kunt."], [1, "Houd 1 tel vast."], [0, "Zak langzaam (in 2–3 tellen) terug."]],
+      2: [[0, "Sta op één been met een hand tegen de muur. Het andere been haak je achter je enkel."], [1, "Kom rustig omhoog op de tenen van je standbeen, zo hoog als je kunt."], [1, "Houd 1 tel vast."], [0, "Zak langzaam (in 2–3 tellen) terug en wissel na je herhalingen van been."]]},
+    sldl: {
+      0: [[0, "Ga naast een muur staan en leg één hand ertegen. Sta op het been aan de muurkant, knie licht gebogen."], [1, "Scharnier in je heup: je bovenlijf gaat een stukje naar voren, je andere been naar achteren."], [1, "Rug blijft recht; houd de beweging klein."], [0, "Kom omhoog door je bil aan te spannen."]],
+      2: [[0, "Sta op één been, standknie licht gebogen, armen naar voren."], [1, "Scharnier in je heup tot je bovenlijf en achterste been bijna horizontaal zijn."], [1, "Houd onderin 2 tellen stil, rug recht."], [0, "Kom omhoog door je bil aan te spannen."]]},
+    pushup: {
+      0: [[0, "Handen iets breder dan je schouders op de grond, knieën op de mat."], [0, "Span je buik en billen aan: rechte lijn van hoofd tot knieën."], [1, "Zak tot je borst bijna de grond raakt. Ellebogen schuin naar achteren, niet wijd opzij."], [0, "Duw jezelf weer omhoog en adem daarbij uit."]],
+      2: [[0, "Handen iets breder dan je schouders, op je tenen, lichaam als een plank."], [0, "Span je buik en billen aan."], [1, "Zak in 3 tellen omlaag en houd 1 tel stil net boven de grond."], [0, "Duw jezelf krachtig weer omhoog en adem daarbij uit."]]},
+    uitval: {
+      0: [[0, "Zet één voet ver naar voren, achterste knie op de grond (op een handdoek)."], [0, "Leg je handen op je voorste knie, bovenlijf rechtop."], [1, "Schuif je heup rustig naar voren tot je rek voelt in de lies van je achterste been."], [1, "Span je bil van het achterste been licht aan: dan voel je de rek beter."]],
+      2: [[0, "Zet één voet ver naar voren, achterste knie op de grond (op een handdoek)."], [1, "Schuif je heup naar voren en breng je armen omhoog."], [1, "Buig een klein beetje achterover en open je borst. Blijf lang in je onderrug."], [1, "Adem rustig; je voelt de rek van je lies tot in je zij."]]},
+    hond: {
+      0: [[0, "Begin op handen en knieën."], [1, "Til je knieën van de grond en duw je billen omhoog en naar achteren: een omgekeerde V."], [1, "Houd je knieën flink gebogen; een lange rug is het belangrijkst."], [1, "Duw de grond weg met je handen en adem rustig."]],
+      2: [[0, "Begin op handen en knieën."], [1, "Til je knieën van de grond en duw je billen omhoog en naar achteren: een omgekeerde V."], [2, "Til één gestrekt been op in het verlengde van je rug. Je heupen blijven recht."], [1, "Zet het been neer en wissel."]]},
+    fig4: {
+      0: [[0, "Lig op je rug, knieën gebogen, voeten plat."], [0, "Leg één enkel op de andere knie: je benen vormen een '4'."], [0, "Je onderste voet blijft op de grond. Duw je bovenste knie eventueel zacht van je af."], [0, "Je voelt rek in de bil van het gekruiste been. Adem rustig."]],
+      2: [[0, "Begin op handen en knieën."], [1, "Breng één knie naar voren achter je pols en leg je onderbeen schuin voor je. Strek het andere been lang naar achteren."], [1, "Houd je heupen recht en zak langzaam voorover op je onderarmen."], [1, "Je voelt rek diep in de bil van het voorste been. Adem rustig."]]},
+    hamstring: {
+      0: [[0, "Lig op je rug, riem of handdoek om je voet, andere voet plat op de grond."], [0, "Strek het been met de riem richting het plafond."], [1, "Trek met de riem je been rustig iets dichter naar je toe."], [1, "Stop bij een duidelijke rek, niet bij pijn. Schouders ontspannen."]],
+      2: [[0, "Lig op je rug, riem of handdoek om je voet, andere been gestrekt op de grond."], [0, "Strek het been met de riem richting het plafond."], [1, "Trek je been rustig dichter naar je toe en trek ook je tenen naar je toe."], [1, "De rek gaat door tot in je kuit. Stop bij een duidelijke rek, niet bij pijn."]]},
+    kuitrek: {
+      0: [[0, "Sta voor een muur, handen tegen de muur op schouderhoogte."], [0, "Zet één been ver naar achteren, hiel op de grond, tenen recht naar voren."], [1, "Buig je voorste knie en leun naar de muur tot je rek voelt in je achterste kuit."], [1, "Achterste been blijft gestrekt, hiel op de grond."]],
+      1: [[0, "Sta voor een muur, handen tegen de muur op schouderhoogte."], [0, "Zet één been een halve pas naar achteren, hiel op de grond."], [1, "Buig je achterste knie iets en zak door je knieën."], [1, "Je voelt de rek laag in je kuit en achillespees. Hiel blijft op de grond."]]},
+    sfinx: {
+      1: [[0, "Lig op je buik, benen lang naar achteren, ellebogen onder je schouders."], [1, "Til je borst op naar de sfinx en blijf even."], [1, "Zet je handen naast je borst en strek je armen half: halve cobra. Schouders laag."], [0, "Wissel rustig af tussen onderarmen en handen."]],
+      2: [[0, "Lig op je buik, handen naast je borst, benen lang naar achteren."], [1, "Duw jezelf omhoog en strek je armen zover als prettig is."], [1, "Schouders laag, weg van je oren. Je billen blijven ontspannen."], [0, "Adem rustig en zak weer terug."]]},
+    voorover: {
+      0: [[0, "Sta met je voeten op heupbreedte."], [1, "Buig je knieën flink en buig vanuit je heupen voorover."], [1, "Leg je handen op je scheenbenen of de grond en laat je hoofd hangen."], [0, "Rol langzaam, wervel voor wervel, weer omhoog."]],
+      2: [[0, "Sta met je voeten op heupbreedte."], [1, "Buig vanuit je heupen voorover met gestrekte benen."], [1, "Pak je ellebogen vast en laat je bovenlijf zwaar hangen."], [0, "Buig je knieën iets en rol langzaam, wervel voor wervel, weer omhoog."]]},
+  };
+  for (const [id, m] of Object.entries(VSTEPS)) for (const [i, s] of Object.entries(m)) if (EX[id].v[i]) EX[id].v[i].steps = s;
+
   // ------------------------------------------------------------------ opbouw
   const PHASES = [
     {n: "Kennismaken", k: "Makkelijke varianten, 1 ronde, 6–8 herhalingen en ruim rust. Je leert de bewegingen goed uitvoeren.", y: "Houdingen van 30 seconden. Je leert de houdingen en het rustige ademen kennen."},
@@ -986,7 +1048,7 @@ const KY = (() => {
       <div class="card ky-hero"><div id="kyDrawFig"></div><div class="ky-cue" id="kyDrawLbl"></div>
         <p style="margin:6px 0 0"><b>${esc(v.name)}</b>${(v.need || []).length ? ` · <span class="muted">nodig: ${v.need.join(", ")}</span>` : ""}</p><p class="cap" style="margin:2px 0 0">${esc(v.cue)}</p></div>
       <div class="card"><h3>Waarom?</h3><p style="margin:0">${esc(ex.why)}</p></div>
-      <div class="card"><h3>Zo doe je het</h3><div class="ky-steps">${ex.steps.map(([fi, t], i) => `<div class="ky-step">${exThumb(id, ex.v.indexOf(v), "", Math.min(fi, v.frames.length - 1))}<div><span class="ky-num">${i + 1}</span>${esc(t)}</div></div>`).join("")}</div></div>
+      <div class="card"><h3>Zo doe je het</h3><div class="ky-steps">${(v.steps || ex.steps).map(([fi, t], i) => `<div class="ky-step">${exThumb(id, ex.v.indexOf(v), "", Math.min(fi, v.frames.length - 1))}<div><span class="ky-num">${i + 1}</span>${esc(t)}</div></div>`).join("")}</div></div>
       <div class="card"><h3>Dit moet je voelen</h3><div class="ky-feel"><svg class="ky-fig" viewBox="${VB}">${figSVG(v.frames[v.key ?? (v.frames.length > 1 ? 1 : 0)].p, feelFig)}</svg>
         <div>${ex.feel.map(f => `<div class="ky-feel-row"><i></i>${esc(f[0])}</div>`).join("")}
         <p class="cap">Een <b>rekkend</b> of <b>brandend</b> gevoel in deze spieren is goed. <b>Scherpe of stekende pijn</b>, of pijn in een gewricht: stop en kies de makkelijkere variant.</p></div></div></div>
@@ -994,7 +1056,7 @@ const KY = (() => {
           <div class="ky-mis-p bad"><svg class="ky-fig" viewBox="${VB}">${figSVG(m.bad, {...v, hl: []})}</svg><span>✗ ${esc(m.txt)}</span></div></div><p class="cap"><b>Oplossing:</b> ${esc(m.fix)}</p>`
           : `<div class="ky-mis-t"><span class="ky-x">✗</span><div><b>${esc(m.txt)}</b><p class="cap" style="margin:2px 0 0"><b>Oplossing:</b> ${esc(m.fix)}</p></div></div>`).join("")}</div>
       ${ex.v.length > 1 ? `<div class="card"><h3>Te zwaar? Te makkelijk?</h3><p class="cap">Elke oefening heeft een makkelijkere en een zwaardere variant. De opbouw kiest automatisch; je mag altijd terug naar een makkelijkere.</p>
-        <div class="ky-vars">${ex.v.map((x, i) => `<button class="ky-var${i === cur ? " cur" : ""}" data-vi="${i}">${exThumb(id, i)}<b>${["Makkelijker", "Standaard", "Zwaarder"][i] || ""}</b><span>${esc(x.name)}</span>${i === cur ? '<span class="badge">jouw fase</span>' : ""}</button>`).join("")}</div></div>` : ""}`;
+        <div class="ky-vars">${ex.v.map((x, i) => `<button class="ky-var${i === cur ? " cur" : ""}${x === v ? " sel" : ""}" data-vi="${i}">${exThumb(id, i)}<b>${["Makkelijker", "Standaard", "Zwaarder"][i] || ""}</b><span>${esc(x.name)}</span>${x === v ? '<span class="badge">je kijkt hiernaar</span>' : ""}${i === cur ? '<span class="badge">jouw fase</span>' : ""}</button>`).join("")}</div></div>` : ""}`;
     $("#drawer").classList.add("on"); $("#drawerBg").classList.add("on"); $("#drawer").scrollTop = 0;
     mountBig($("#kyDrawFig"), ex, v, {lbl: $("#kyDrawLbl")});
     mountAll($("#dBody"));
@@ -1060,7 +1122,7 @@ const KY = (() => {
           <div class="ky-p-info">
             <div class="ky-count">${it.reps ? `<div class="ky-reps"><span id="kyR">0</span><small>/ ${it.reps}${it.alt ? " per kant" : ""}</small></div>` : `<div class="ky-ring">${ring(1)}<div class="ky-ring-t" id="kyT">${it.secs}</div></div>`}</div>
             <p class="ky-one">${esc(v.cue)}</p>
-            <details class="ky-more"><summary>Meer uitleg</summary><ol>${s.ex.steps.map(x => `<li>${esc(x[1])}</li>`).join("")}</ol><p class="cap"><b>Let op:</b> ${s.ex.mistakes.map(m => `${esc(m.txt)} → ${esc(m.fix)}`).join(" ")}</p></details>
+            <details class="ky-more"><summary>Meer uitleg</summary><ol>${(s.v.steps || s.ex.steps).map(x => `<li>${esc(x[1])}</li>`).join("")}</ol><p class="cap"><b>Let op:</b> ${s.ex.mistakes.map(m => `${esc(m.txt)} → ${esc(m.fix)}`).join(" ")}</p></details>
             <div class="ky-ctrl"><button class="btn" id="kyPrev">⏮</button><button class="btn" id="kyPause">⏸ Pauze</button><button class="btn primary" id="kyNext">${it.reps ? "Klaar ✓" : "Volgende ⏭"}</button></div></div></div>`;
         anim = mountBig(el.querySelector("#kyFig"), s.ex, v, {lbl: el.querySelector("#kyLbl"), mirror: s.mirror, speed: fast,
           onCycle: it.reps ? c => { reps = c; const r = el.querySelector("#kyR"); if (r) r.textContent = Math.min(c, it.reps); if (c === it.reps){ beep(990); setTimeout(() => { if (ST_[i] === s && !paused) go(i + 1); }, 1500); } else beep(520, 60); } : null});
