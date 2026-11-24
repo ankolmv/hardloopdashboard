@@ -104,9 +104,22 @@ jobs:
         with:
           path: site
 
+      - id: deploy_try
+        if: steps.site.outputs.changed == 'true'
+        continue-on-error: true   # GitHub Pages faalt soms tijdelijk ("Fetching artifact metadata failed")
+        uses: actions/deploy-pages@v4
+
+      - name: Even wachten voor tweede poging
+        if: steps.deploy_try.outcome == 'failure'
+        run: sleep 30
+
+      - id: deploy_retry
+        if: steps.deploy_try.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+
       - id: deploy
         if: steps.site.outputs.changed == 'true'
-        uses: actions/deploy-pages@v4
+        run: echo "page_url=${{ steps.deploy_try.outputs.page_url || steps.deploy_retry.outputs.page_url }}" >> "$GITHUB_OUTPUT"
 
       - name: Melding bij mislukte run
         if: failure()
