@@ -42,7 +42,8 @@ def recent_best(runs, today, weeks=ANCHOR_WEEKS, decay=ANCHOR_DECAY):
     km_now = km_between(today - dt.timedelta(days=28), today + dt.timedelta(days=1))
     best = None
     for r in runs:
-        if not r.get("vdot_race"):
+        proven = max(r.get("vdot_race") or 0, r.get("vdot_floor") or 0)  # ook inspanningen met herstelstukken
+        if not proven:
             continue
         d = dt.date.fromisoformat(r["date"])
         age = (today - d).days / 7
@@ -51,9 +52,9 @@ def recent_best(runs, today, weeks=ANCHOR_WEEKS, decay=ANCHOR_DECAY):
         km_then = km_between(d - dt.timedelta(days=28), d + dt.timedelta(days=1))
         ratio = km_now / km_then if km_then else 1.0
         drop = min(1.0, max(0.0, (0.9 - ratio) / 0.4))  # 90% of meer van de omvang: geen aftrek; 50%: volle aftrek
-        v = r["vdot_race"] - decay * age * drop
+        v = proven - decay * age * drop
         if best is None or v > best["value"]:
-            best = {"value": v, "vdot": r["vdot_race"], "date": r["date"], "name": r.get("name"), "age_weeks": round(age, 1)}
+            best = {"value": v, "vdot": proven, "date": r["date"], "name": r.get("name"), "age_weeks": round(age, 1)}
     return best
 
 

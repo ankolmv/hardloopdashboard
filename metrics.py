@@ -262,7 +262,7 @@ def analyze_run(a, ctx):
         "stamina_end": g.get("stamina_end"), "garmin_id": g.get("garmin_id"),
         **{k: v for k, v in (ctx.get("garmin_extra") or {}).get(str(g.get("garmin_id")), {}).items()},
         "threshold_pace": a.get("threshold_pace"),
-        "vdot_race": None, "vdot_hr": None, "efforts": {}, "decoupling": None, "ef": None, "eff_power": None,
+        "vdot_race": None, "vdot_floor": None, "vdot_hr": None, "efforts": {}, "decoupling": None, "ef": None, "eff_power": None,
     }
     if r["power"] and a.get("average_speed"):
         r["eff_power"] = round(a["average_speed"] * 60 / r["power"], 3)  # m/min per watt
@@ -272,10 +272,16 @@ def analyze_run(a, ctx):
             v = D / e["time"]
             vd = vdot_from_race(D, e["time"])
             hr_hard = 0.95 * ctx["lthr"] if ctx.get("lthr") else 0.86 * max_hr  # ~drempelhartslag
-            hard = e["even"] and ((e["hr"] and e["hr"] >= hr_hard) or (tp and v >= tp * EFFORT_SPEED_FACTOR[D]) or r["race"])
-            r["efforts"][int(D)] = {"time": round(e["time"]), "vdot": round(vd, 2), "hard": bool(hard)}
+            intense = (e["hr"] and e["hr"] >= hr_hard) or (tp and v >= tp * EFFORT_SPEED_FACTOR[D]) or r["race"]
+            hard = e["even"] and intense
+            # Ongelijkmatig (blokken met herstel): de tijd onderschat wat je op die afstand kunt, maar is wel
+            # bewijs van wat je minstens kunt. Telt als ondergrens: alleen als hij hoger uitkomt dan de rest.
+            floor = intense and not e["even"] and D >= 5000
+            r["efforts"][int(D)] = {"time": round(e["time"]), "vdot": round(vd, 2), "hard": bool(hard), "floor": bool(floor)}
             if hard and (r["vdot_race"] is None or vd > r["vdot_race"]):
                 r["vdot_race"] = round(vd, 2)
+            if floor and (r["vdot_floor"] is None or vd > r["vdot_floor"]):
+                r["vdot_floor"] = round(vd, 2)
 
     if mins >= 20 and hr and vel and time:
         idx = [i for i, t in enumerate(time) if t >= 300 and hr[i] and vel[i] and vel[i] > 1.5]
@@ -382,7 +388,7 @@ def weekly_runs(runs, offset, groups="intervals"):
     for r in runs:
         ws = week_start(dt.date.fromisoformat(r["date"])).isoformat()
         w = weeks.setdefault(ws, {"week": ws, "km": 0, "minutes": 0, "runs": 0, "load": 0, "longest": 0,
-                                  "elev": 0, "trimp": 0, "race": [], "hr": [], "hr_tired": [], "z": [0] * 7, "pz": [0] * 7,
+                                  "elev": 0, "trimp": 0, "race": [], "floor": [], "hr": [], "hr_tired": [], "z": [0] * 7, "pz": [0] * 7,
                                   **{k: [] for k in WEEK_LISTS}})
         w["km"] += r["km"]
         w["minutes"] += r["minutes"]
@@ -393,6 +399,8 @@ def weekly_runs(runs, offset, groups="intervals"):
         w["longest"] = max(w["longest"], r["km"])
         if r["vdot_race"]:
             w["race"].append(r["vdot_race"])
+        if r.get("vdot_floor"):
+            w["floor"].append(r["vdot_floor"])
         if r["vdot_hr"] and r.get("steady", True):  # alleen runs met een gelijkmatig tempo
             prev = (dt.date.fromisoformat(r["date"]) - dt.timedelta(days=1)).isoformat()
             w["hr_tired" if prev in hard_days else "hr"].append(r["vdot_hr"] + offset)
@@ -414,13 +422,17 @@ def weekly_runs(runs, offset, groups="intervals"):
         pool = w["hr"] if len(w["hr"]) >= 2 else w["hr"] + w["hr_tired"]
         vh = statistics.median(pool) if len(pool) >= 2 else None
         use_race = vr and (not vh or vr >= vh - 1.5)
+        v_week = vr if use_race else (round(vh, 2) if vh else vr)
+        src = "race" if use_race else ("hr" if vh else None)
+        vf = max(w["floor"]) if w["floor"] else None
+        if vf and (v_week is None or vf > v_week):  # inspanning met herstelstukken: alleen als ondergrens
+            v_week, src = vf, "race"
         out.append({
             "week": ws, "km": round(w["km"], 1), "hours": round(w["minutes"] / 60, 2), "runs": w["runs"],
             "load": round(w["load"]), "longest": round(w["longest"], 1), "elev": round(w["elev"]),
             "trimp": round(w["trimp"]),
             "vdot_race": vr, "vdot_hr": round(vh, 2) if vh else None,
-            "vdot": vr if use_race else (round(vh, 2) if vh else vr),
-            "vdot_src": "race" if use_race else ("hr" if vh else None),
+            "vdot": v_week, "vdot_src": src, "vdot_floor": vf,
             "ef": med(w["ef"], 4), "decoupling": med(w["dec"], 1), "cadence": med(w["cad"], 1),
             "stride": med(w["stride"]), "vert_osc": med(w["vo"], 2), "vert_ratio": med(w["vr"], 2),
             "gct": med(w["gct"], 1), "gct_pct": med(w["gctp"], 1), "power": med(w["pw"], 0),
